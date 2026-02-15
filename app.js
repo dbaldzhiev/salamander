@@ -40,10 +40,10 @@
   let isPanning = false;
   let panStart = { x: 0, y: 0 };
 
-  const NODE_RADIUS = 24;
+  const NODE_RADIUS = 50;
   const HIT_MARGIN = 8;
-  const GRID_SIZE = 40;
-  const PIXELS_PER_METER = 40; // 1m symbols 40px (1.2m ~= 48px node diam)
+  const GRID_SIZE = 100;
+  const PIXELS_PER_METER = 100; // 1m = 100 units (cm)
 
   function snapToGrid(v) {
     return Math.round(v / GRID_SIZE) * GRID_SIZE;
@@ -360,7 +360,8 @@
   }
 
   function drawGrid(w, h) {
-    const gridSize = 40;
+    // Use global GRID_SIZE
+    const gridSize = GRID_SIZE;
     const scaledGrid = gridSize * cam.zoom;
 
     if (scaledGrid < 8) return; // too zoomed out
@@ -715,7 +716,7 @@
       targetId: newNode.id,
       typeId: conn.typeId,
       direction: conn.direction,
-      distance: Math.round(dist(src, newNode) * 10) / 10,
+      distance: Math.round(dist(src, newNode) / 10) / 10, // /100 for cm->m, then *10/10 for rounding = /10
       distanceManual: false,
       speed: conn.speed,
       weight: conn.weight,
@@ -728,7 +729,7 @@
       targetId: conn.targetId,
       typeId: conn.typeId,
       direction: conn.direction,
-      distance: Math.round(dist(newNode, tgt) * 10) / 10,
+      distance: Math.round(dist(newNode, tgt) / 10) / 10, // /100 for cm->m, then *10/10 for rounding = /10
       distanceManual: false,
       speed: conn.speed,
       weight: conn.weight,
@@ -793,7 +794,7 @@
       targetId: tgtId,
       typeId: state.connTypes[0].id,
       direction: 'forward',
-      distance: Math.round(d * 10) / 10,
+      distance: Math.round((d / 100) * 10) / 10, // d is in cm, convert to m
       distanceManual: false,
       speed: 0,
       weight: 1,
@@ -827,7 +828,7 @@
       if (c.distanceManual) continue;
       const src = state.nodes.find(n => n.id === c.sourceId);
       const tgt = state.nodes.find(n => n.id === c.targetId);
-      if (src && tgt) c.distance = Math.round(dist(src, tgt) * 10) / 10;
+      if (src && tgt) c.distance = Math.round((dist(src, tgt) / 100) * 10) / 10;
     }
     recalcFireSafety();
   }
