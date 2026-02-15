@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Node Graph Editor</title>
+  <meta name="description"
+    content="Interactive node graph editor — create, connect, and configure nodes with typed connections and properties.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <div class="toolbar-brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="6" cy="6" r="3" />
+        <circle cx="18" cy="6" r="3" />
+        <circle cx="6" cy="18" r="3" />
+        <circle cx="18" cy="18" r="3" />
+        <line x1="9" y1="6" x2="15" y2="6" />
+        <line x1="6" y1="9" x2="6" y2="15" />
+        <line x1="18" y1="9" x2="18" y2="15" />
+        <line x1="9" y1="18" x2="15" y2="18" />
+      </svg>
+      <span>Graph Editor</span>
+    </div>
+    <div class="toolbar-tools">
+      <button class="tool-btn active" data-tool="select" title="Select & Move (V)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+        </svg>
+        <span>Select</span>
+      </button>
+      <button class="tool-btn" data-tool="addNode" title="Add Node (N)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="9" />
+          <line x1="12" y1="8" x2="12" y2="16" />
+          <line x1="8" y1="12" x2="16" y2="12" />
+        </svg>
+        <span>Add Node</span>
+      </button>
+      <button class="tool-btn" data-tool="connect" title="Connect (C)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="5" cy="12" r="3" />
+          <circle cx="19" cy="12" r="3" />
+          <line x1="8" y1="12" x2="16" y2="12" />
+        </svg>
+        <span>Connect</span>
+      </button>
+      <button class="tool-btn" data-tool="delete" title="Delete (D)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+        </svg>
+        <span>Delete</span>
+      </button>
+    </div>
+    <div class="toolbar-actions">
+      <button class="action-btn" id="btnClearAll" title="Clear All">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12" />
+        </svg>
+        Clear
+      </button>
+      <button class="action-btn" id="btnExport" title="Export JSON">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+        Export
+      </button>
+      <button class="action-btn" id="btnImport" title="Import JSON">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" y1="3" x2="12" y2="15" />
+        </svg>
+        Import
+      </button>
+      <input type="file" id="importFile" accept=".json" style="display:none">
+    </div>
+    <div class="toolbar-info">
+      <span id="zoomLevel">100%</span>
+    </div>
+  </div>
+
+  <!-- Main layout -->
+  <div id="main">
+    <!-- Canvas area -->
+    <div id="canvas-container">
+      <canvas id="graphCanvas"></canvas>
+      <div id="canvas-hint">Click canvas to add nodes · Drag to move · Scroll to zoom</div>
+    </div>
+
+    <!-- Properties sidebar -->
+    <div id="sidebar">
+      <div id="sidebar-empty">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+          opacity="0.3">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+        <p>Select a node or connection to edit its properties</p>
+      </div>
+
+      <div id="sidebar-node" class="sidebar-panel" style="display:none">
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="9" />
+          </svg>
+          Node Properties
+        </h3>
+        <div class="prop-group">
+          <label for="nodeName">Name</label>
+          <input type="text" id="nodeName" placeholder="Node name...">
+        </div>
+        <div class="prop-group">
+          <label for="nodeType">Type</label>
+          <select id="nodeType"></select>
+        </div>
+        <div class="prop-group coord-group">
+          <div>
+            <label for="nodeX">X</label>
+            <input type="number" id="nodeX" step="1">
+          </div>
+          <div>
+            <label for="nodeY">Y</label>
+            <input type="number" id="nodeY" step="1">
+          </div>
+        </div>
+        <div class="prop-group" id="peopleGroup">
+          <label for="nodePeople">Number of People</label>
+          <input type="number" id="nodePeople" step="1" min="0" placeholder="0">
+          <small class="prop-hint" id="peopleHint"></small>
+        </div>
+        <div class="prop-group">
+          <label>Custom Properties</label>
+          <div id="nodeCustomProps"></div>
+          <button class="btn-add-prop" id="btnAddNodeProp">+ Add Property</button>
+        </div>
+      </div>
+
+      <div id="sidebar-connection" class="sidebar-panel" style="display:none">
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="5" y1="12" x2="19" y2="12" />
+            <polyline points="12 5 19 12 12 19" />
+          </svg>
+          Connection Properties
+        </h3>
+        <div class="prop-group">
+          <label for="connType">Type</label>
+          <select id="connType"></select>
+        </div>
+        <div class="prop-group">
+          <label for="connDirection">Direction</label>
+          <select id="connDirection">
+            <option value="forward">Forward (→)</option>
+            <option value="backward">Backward (←)</option>
+            <option value="both">Bidirectional (↔)</option>
+          </select>
+        </div>
+        <div class="prop-group">
+          <label for="connDistance">Distance</label>
+          <input type="number" id="connDistance" step="0.1" min="0">
+          <small class="prop-hint">Auto-filled from positions, editable to override</small>
+        </div>
+        <div class="prop-group">
+          <label for="connSpeed">Speed</label>
+          <input type="number" id="connSpeed" step="0.1" min="0" placeholder="0">
+        </div>
+        <div class="prop-group">
+          <label for="connWeight">Weight</label>
+          <input type="number" id="connWeight" step="0.1" min="0" placeholder="1">
+        </div>
+        <div class="prop-group">
+          <label for="connCongestion">Congestion Effect</label>
+          <select id="connCongestion">
+            <option value="none">None</option>
+            <option value="low">Low (slight delay)</option>
+            <option value="medium">Medium (noticeable)</option>
+            <option value="high">High (severe)</option>
+            <option value="blocked">Blocked</option>
+          </select>
+        </div>
+        <div class="prop-group">
+          <label>Custom Properties</label>
+          <div id="connCustomProps"></div>
+          <button class="btn-add-prop" id="btnAddConnProp">+ Add Property</button>
+        </div>
+      </div>
+
+      <!-- Type manager -->
+      <div id="type-manager">
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+            <path d="M2 17l10 5 10-5" />
+            <path d="M2 12l10 5 10-5" />
+          </svg>
+          Type Definitions
+        </h3>
+        <div class="type-section">
+          <h4>Node Types</h4>
+          <div id="nodeTypesList"></div>
+          <button class="btn-add-type" id="btnAddNodeType">+ Add Node Type</button>
+        </div>
+        <div class="type-section">
+          <h4>Connection Types</h4>
+          <div id="connTypesList"></div>
+          <button class="btn-add-type" id="btnAddConnType">+ Add Connection Type</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
