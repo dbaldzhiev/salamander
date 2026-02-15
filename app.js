@@ -222,8 +222,11 @@
     else if (conn.typeId === 'stairs_down') type = 'stair_down';
 
     // Get dimensions and flow
-    // Width: use custom prop or default 1.2m
-    const width = parseFloat(conn.props.width || 1.2);
+    // Width: use direct property (conn.width) if available and valid
+    let width = (conn.width !== undefined && conn.width !== null) ? Number(conn.width) : 1.2;
+    if (isNaN(width) || width <= 0) width = 1.2;
+    // Fallback to props.width if conn.width failed? No, UI sets conn.width.
+
     const length = conn.distance || 0;
 
     // People: use source node's people count
@@ -531,15 +534,46 @@
         hasQueue = true;
         conn.congestion = 'blocked';
 
-        // Formula 2: t = N / (w * q_gran)
-        // N = people count in segment (using src.people as load)
-        const N = p.people || 0;
-        const denom = p.width * limits.q_gran;
+        // Formula 2 (Norm 2, pg 6):
+        // t = (L / v_gran) + N * (1/Q_out - 1/Q_in)
+        // Note: For thin doors (thickness <= 0.7m), L is assumed 0 for the travel part.
 
-        conn.travelTime = denom > 0.1 ? N / denom : 9999;
+        const N = p.people || 0;
+        const Q_out = p.width * limits.q_gran;
+        const Q_in = Q_curr; // This is Q_in (calculated from sum of prev or ratio)
+
+        // Travel Term
+        let travelTerm = 0;
+        if (p.type.includes('door') && p.length <= 0.7) {
+          travelTerm = 0;
+        } else {
+          travelTerm = (limits.v_gran > 0.1) ? p.length / limits.v_gran : 0;
+        }
+
+        // Delay Term
+        let delayTerm = 0;
+        if (Q_out > 0.1 && Q_in > 0.1) {
+          // If Q_in > Q_out, we have a bottleneck delay
+          // The formula technically subtracts arrival rate. 
+          // t = L/v + N*(1/Q_out - 1/Q_in)
+          // If N is large, this term dominates. 
+          // If Q_in is very large (instant arrival), 1/Q_in -> 0.
+          const val = (1 / Q_out) - (1 / Q_in);
+          // Ensure term is non-negative? 
+          // If Q_in < Q_out (no queue should form), but check logic says q > q_max.
+          // q > q_max implies Q_in/w > q_max. 
+          // Q_out = w * q_gran. 
+          // Usually q_gran < q_max. So Q_in might be > Q_out.
+          delayTerm = N * Math.max(0, val);
+        } else if (Q_out > 0.1) {
+          // Fallback if Q_in is 0? 
+          delayTerm = N / Q_out;
+        }
+
+        conn.travelTime = travelTerm + delayTerm;
 
         // Propagate BOUNDARY flow downstream
-        final_Q_out = p.width * limits.q_gran;
+        final_Q_out = Q_out;
 
       } else {
         // Case A: No Queue
@@ -584,7 +618,8 @@
         time: conn.travelTime,
         method: 'B',
         q_max: q_max,
-        q_gran: limits.q_gran
+        q_gran: limits.q_gran,
+        v_gran: limits.v_gran
       };
     });
 
@@ -2313,8 +2348,20 @@
         const fs = c.flowState || { Q_in: 0, q_spec: 0, hasQueue: false };
 
         text += `  2. Flow Propagation:\n`;
-        text += `     - Incoming Flow (Q_in) = ${(fs.Q_in || 0).toFixed(2)} p/min\n`;
-        text += `     - Specific Flow (q) = Q_in / W = ${(fs.q_spec || 0).toFixed(2)} p/m/min\n`;
+        // Check if initial segment (no incoming flow strictu sensu, but generated flow)
+        // We can infer it's initial if Q_in matches Q based on Density calculation logic, 
+        // or checks incoming conns. But we don't have easy access to graph topology here without search.
+        // Let's just call it "Segment Flow (Q)" generally, or "Incoming Flow (Q_in)" for downstream.
+        // Actually, we can check if it's a start node.
+        const isStart = src.typeId === 'start' || src.typeId === 'start2';
+
+        if (isStart) {
+          text += `     - Generated Flow (Q) = ${(fs.Q_in || 0).toFixed(2)} p/min (from Density)\n`;
+        } else {
+          text += `     - Incoming Flow (Q_in) = ${(fs.Q_in || 0).toFixed(2)} p/min\n`;
+        }
+
+        text += `     - Specific Flow (q) = Q / W = ${(fs.q_spec || 0).toFixed(2)} p/m/min\n`;
 
         text += `  3. Bottleneck Check:\n`;
         text += `     - Max Permissible (q_max) = ${stats.q_max} p/m/min\n`;
@@ -2327,10 +2374,18 @@
 
         text += `  4. Time Calculation:\n`;
         if (fs.hasQueue) {
-          // Formula 2
-          const N = getSegmentParams(c).people || 0; // Just for display
-          text += `     - Method: Formula 2 (Queue)\n`;
-          text += `     - Time = N / (W * q_gran) = ${N} / (${(c.width || 1.2).toFixed(2)} * ${stats.q_gran}) = ${stats.time.toFixed(4)} min\n`;
+          // Formula 2 (Norm 2)
+          const N = getSegmentParams(c).people || 0;
+          const Q_out = (c.width || 1.2) * stats.q_gran;
+          const Q_in = fs.Q_in || 0;
+
+          text += `     - Method: Formula 2 (Norm 2 Queue)\n`;
+          text += `     - Parameters: v_gran=${stats.v_gran || 14} m/min, q_gran=${stats.q_gran}\n`;
+          text += `     - Q_out = W * q_gran = ${(c.width || 1.2).toFixed(2)} * ${stats.q_gran} = ${Q_out.toFixed(2)}\n`;
+          text += `     - Q_in = ${Q_in.toFixed(2)}\n`;
+          text += `     - Travel Term = ${c.typeId.includes('door') && c.distance <= 0.7 ? '0 (Thin Door)' : `L / v_gran = ${c.distance.toFixed(2)} / ${stats.v_gran || 14}`}\n`;
+          text += `     - Delay Term = N * (1/Q_out - 1/Q_in)\n`;
+          text += `     - Time = Travel + Delay = ${stats.time.toFixed(4)} min\n`;
         } else {
           // Formula 1
           text += `     - Method: Formula 1 (Travel Speed)\n`;

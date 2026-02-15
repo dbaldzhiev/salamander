@@ -1,0 +1,1058 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "name": "",
+      "typeId": "start",
+      "x": -2000,
+      "y": -600,
+      "people": 8,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 2,
+      "name": "",
+      "typeId": "exit",
+      "x": 1100,
+      "y": -100,
+      "people": 75,
+      "props": {},
+      "maxTime": 2.803930409337664
+    },
+    {
+      "id": 3,
+      "name": "",
+      "typeId": "waypoint",
+      "x": -2000,
+      "y": -100,
+      "props": {},
+      "people": 11,
+      "maxTime": 0.07553534760926958
+    },
+    {
+      "id": 4,
+      "name": "",
+      "typeId": "start2",
+      "x": -2000,
+      "y": 300,
+      "people": 3,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 5,
+      "name": "",
+      "typeId": "start2",
+      "x": -1700,
+      "y": -500,
+      "people": 6,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 6,
+      "name": "",
+      "typeId": "start2",
+      "x": -1700,
+      "y": 300,
+      "people": 2,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 7,
+      "name": "",
+      "typeId": "waypoint",
+      "x": -1700,
+      "y": -100,
+      "props": {},
+      "people": 19,
+      "maxTime": 0.1434365821771708
+    },
+    {
+      "id": 8,
+      "name": "",
+      "typeId": "start2",
+      "x": -1400,
+      "y": -500,
+      "people": 6,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 9,
+      "name": "",
+      "typeId": "start2",
+      "x": -1400,
+      "y": -500,
+      "people": 6,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 10,
+      "name": "",
+      "typeId": "start2",
+      "x": -1400,
+      "y": 300,
+      "people": 2,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 11,
+      "name": "",
+      "typeId": "waypoint",
+      "x": -1400,
+      "y": -100,
+      "props": {},
+      "people": 27,
+      "maxTime": 0.26072053279445473
+    },
+    {
+      "id": 12,
+      "name": "",
+      "typeId": "start2",
+      "x": -1100,
+      "y": -500,
+      "people": 6,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 13,
+      "name": "",
+      "typeId": "start2",
+      "x": -1100,
+      "y": 300,
+      "people": 2,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 14,
+      "name": "",
+      "typeId": "waypoint",
+      "x": -1100,
+      "y": -100,
+      "props": {},
+      "people": 35,
+      "maxTime": 0.42738719946112136
+    },
+    {
+      "id": 15,
+      "name": "",
+      "typeId": "start2",
+      "x": -800,
+      "y": -500,
+      "people": 6,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 19,
+      "name": "",
+      "typeId": "waypoint",
+      "x": -800,
+      "y": -100,
+      "props": {},
+      "people": 41,
+      "maxTime": 0.6434365821771707
+    },
+    {
+      "id": 20,
+      "name": "",
+      "typeId": "start2",
+      "x": -500,
+      "y": -600,
+      "people": 7,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 21,
+      "name": "",
+      "typeId": "waypoint",
+      "x": -500,
+      "y": -100,
+      "props": {},
+      "people": 48,
+      "maxTime": 0.8965230019302571
+    },
+    {
+      "id": 23,
+      "name": "",
+      "typeId": "start2",
+      "x": -200,
+      "y": -600,
+      "people": 7,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 24,
+      "name": "",
+      "typeId": "waypoint",
+      "x": -200,
+      "y": -100,
+      "props": {},
+      "people": 55,
+      "maxTime": 1.1928192982265533
+    },
+    {
+      "id": 25,
+      "name": "",
+      "typeId": "start2",
+      "x": 100,
+      "y": -600,
+      "people": 7,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 26,
+      "name": "",
+      "typeId": "waypoint",
+      "x": 100,
+      "y": -100,
+      "props": {},
+      "people": 62,
+      "maxTime": 1.5323254710660594
+    },
+    {
+      "id": 27,
+      "name": "",
+      "typeId": "start2",
+      "x": 400,
+      "y": -600,
+      "people": 7,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 28,
+      "name": "",
+      "typeId": "waypoint",
+      "x": 400,
+      "y": -100,
+      "props": {},
+      "people": 69,
+      "maxTime": 1.9150415204487754
+    },
+    {
+      "id": 29,
+      "name": "",
+      "typeId": "start2",
+      "x": 700,
+      "y": -600,
+      "people": 6,
+      "props": {},
+      "maxTime": 0
+    },
+    {
+      "id": 30,
+      "name": "",
+      "typeId": "waypoint",
+      "x": 700,
+      "y": -100,
+      "props": {},
+      "people": 75,
+      "maxTime": 2.340967446374701
+    }
+  ],
+  "connections": [
+    {
+      "id": 2,
+      "sourceId": 1,
+      "targetId": 3,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 5.15,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "none",
+      "props": {},
+      "travelTime": 0.07553534760926958,
+      "calcStats": {
+        "density": 0,
+        "v": 68.18,
+        "q": 102.3,
+        "Q": 122.75999999999999,
+        "time": 0.07553534760926958,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 0.45,
+      "flowState": {
+        "Q_in": 122.75999999999999,
+        "q_spec": 102.3,
+        "Q_out": 122.75999999999999,
+        "hasQueue": false
+      }
+    },
+    {
+      "id": 4,
+      "sourceId": 4,
+      "targetId": 3,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 1.9,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "none",
+      "props": {},
+      "travelTime": 0.027867409797594597,
+      "calcStats": {
+        "density": 0,
+        "v": 68.18,
+        "q": 102.3,
+        "Q": 122.75999999999999,
+        "time": 0.027867409797594597,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 0.45,
+      "flowState": {
+        "Q_in": 122.75999999999999,
+        "q_spec": 102.3,
+        "Q_out": 122.75999999999999,
+        "hasQueue": false
+      }
+    },
+    {
+      "id": 5,
+      "sourceId": 3,
+      "targetId": 7,
+      "typeId": "stairs_down",
+      "direction": "forward",
+      "distance": 2.15,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "blocked",
+      "props": {},
+      "travelTime": 0.06790123456790123,
+      "calcStats": {
+        "density": 0,
+        "v": 0,
+        "q": 204.6,
+        "Q": 245.51999999999998,
+        "time": 0.06790123456790123,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 1.3,
+      "flowState": {
+        "Q_in": 245.51999999999998,
+        "q_spec": 204.6,
+        "Q_out": 162,
+        "hasQueue": true
+      }
+    },
+    {
+      "id": 7,
+      "sourceId": 6,
+      "targetId": 7,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 1.8,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "none",
+      "props": {},
+      "travelTime": 0.02246069378587472,
+      "calcStats": {
+        "density": 0,
+        "v": 80.14,
+        "q": 80.1,
+        "Q": 96.11999999999999,
+        "time": 0.02246069378587472,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 0.45,
+      "flowState": {
+        "Q_in": 96.11999999999999,
+        "q_spec": 80.1,
+        "Q_out": 96.11999999999999,
+        "hasQueue": false
+      }
+    },
+    {
+      "id": 8,
+      "sourceId": 5,
+      "targetId": 7,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 4.6,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "none",
+      "props": {},
+      "travelTime": 0.06746846582575534,
+      "calcStats": {
+        "density": 0,
+        "v": 68.18,
+        "q": 102.3,
+        "Q": 122.75999999999999,
+        "time": 0.06746846582575534,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 0.45,
+      "flowState": {
+        "Q_in": 122.75999999999999,
+        "q_spec": 102.3,
+        "Q_out": 122.75999999999999,
+        "hasQueue": false
+      }
+    },
+    {
+      "id": 9,
+      "sourceId": 7,
+      "targetId": 11,
+      "typeId": "stairs_down",
+      "direction": "forward",
+      "distance": 2.15,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "blocked",
+      "props": {},
+      "travelTime": 0.11728395061728394,
+      "calcStats": {
+        "density": 0,
+        "v": 0,
+        "q": 317.40000000000003,
+        "Q": 380.88,
+        "time": 0.11728395061728394,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "flowState": {
+        "Q_in": 380.88,
+        "q_spec": 317.40000000000003,
+        "Q_out": 162,
+        "hasQueue": true
+      },
+      "width": 1.3
+    },
+    {
+      "id": 11,
+      "sourceId": 9,
+      "targetId": 11,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 4.6,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "none",
+      "props": {},
+      "travelTime": 0.06746846582575534,
+      "calcStats": {
+        "density": 0,
+        "v": 68.18,
+        "q": 102.3,
+        "Q": 122.75999999999999,
+        "time": 0.06746846582575534,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 0.45,
+      "flowState": {
+        "Q_in": 122.75999999999999,
+        "q_spec": 102.3,
+        "Q_out": 122.75999999999999,
+        "hasQueue": false
+      }
+    },
+    {
+      "id": 12,
+      "sourceId": 10,
+      "targetId": 11,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 1.8,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "none",
+      "props": {},
+      "travelTime": 0.02246069378587472,
+      "calcStats": {
+        "density": 0,
+        "v": 80.14,
+        "q": 80.1,
+        "Q": 96.11999999999999,
+        "time": 0.02246069378587472,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 0.45,
+      "flowState": {
+        "Q_in": 96.11999999999999,
+        "q_spec": 80.1,
+        "Q_out": 96.11999999999999,
+        "hasQueue": false
+      }
+    },
+    {
+      "id": 13,
+      "sourceId": 11,
+      "targetId": 14,
+      "typeId": "stairs_down",
+      "direction": "forward",
+      "distance": 2.15,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "blocked",
+      "props": {},
+      "travelTime": 0.16666666666666666,
+      "flowState": {
+        "Q_in": 380.88,
+        "q_spec": 317.40000000000003,
+        "Q_out": 162,
+        "hasQueue": true
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 0,
+        "q": 317.40000000000003,
+        "Q": 380.88,
+        "time": 0.16666666666666666,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      }
+    },
+    {
+      "id": 15,
+      "sourceId": 12,
+      "targetId": 14,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 4.6,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "none",
+      "props": {},
+      "travelTime": 0.06746846582575534,
+      "flowState": {
+        "Q_in": 122.75999999999999,
+        "q_spec": 102.3,
+        "Q_out": 122.75999999999999,
+        "hasQueue": false
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 68.18,
+        "q": 102.3,
+        "Q": 122.75999999999999,
+        "time": 0.06746846582575534,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 0.45
+    },
+    {
+      "id": 16,
+      "sourceId": 13,
+      "targetId": 14,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 1.8,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "none",
+      "props": {},
+      "travelTime": 0.02246069378587472,
+      "flowState": {
+        "Q_in": 96.11999999999999,
+        "q_spec": 80.1,
+        "Q_out": 96.11999999999999,
+        "hasQueue": false
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 80.14,
+        "q": 80.1,
+        "Q": 96.11999999999999,
+        "time": 0.02246069378587472,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 0.45
+    },
+    {
+      "id": 24,
+      "sourceId": 14,
+      "targetId": 19,
+      "typeId": "stairs_down",
+      "direction": "forward",
+      "distance": 2.15,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "blocked",
+      "props": {},
+      "travelTime": 0.21604938271604937,
+      "flowState": {
+        "Q_in": 380.88,
+        "q_spec": 317.40000000000003,
+        "Q_out": 162,
+        "hasQueue": true
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 0,
+        "q": 317.40000000000003,
+        "Q": 380.88,
+        "time": 0.21604938271604937,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 1.3
+    },
+    {
+      "id": 26,
+      "sourceId": 15,
+      "targetId": 19,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 4.6,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "none",
+      "props": {},
+      "travelTime": 0.06746846582575534,
+      "flowState": {
+        "Q_in": 122.75999999999999,
+        "q_spec": 102.3,
+        "Q_out": 122.75999999999999,
+        "hasQueue": false
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 68.18,
+        "q": 102.3,
+        "Q": 122.75999999999999,
+        "time": 0.06746846582575534,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 0.45
+    },
+    {
+      "id": 27,
+      "sourceId": 19,
+      "targetId": 21,
+      "typeId": "stairs_down",
+      "direction": "forward",
+      "distance": 2.15,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "blocked",
+      "props": {},
+      "travelTime": 0.25308641975308643,
+      "flowState": {
+        "Q_in": 284.76,
+        "q_spec": 237.3,
+        "Q_out": 162,
+        "hasQueue": true
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 0,
+        "q": 237.3,
+        "Q": 284.76,
+        "time": 0.25308641975308643,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      }
+    },
+    {
+      "id": 32,
+      "sourceId": 20,
+      "targetId": 21,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 5.3,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "none",
+      "props": {},
+      "travelTime": 0.07773540627750072,
+      "flowState": {
+        "Q_in": 122.75999999999999,
+        "q_spec": 102.3,
+        "Q_out": 122.75999999999999,
+        "hasQueue": false
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 68.18,
+        "q": 102.3,
+        "Q": 122.75999999999999,
+        "time": 0.07773540627750072,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 0.45
+    },
+    {
+      "id": 35,
+      "sourceId": 23,
+      "targetId": 24,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 5.3,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "none",
+      "props": {},
+      "travelTime": 0.07773540627750072,
+      "flowState": {
+        "Q_in": 122.75999999999999,
+        "q_spec": 102.3,
+        "Q_out": 122.75999999999999,
+        "hasQueue": false
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 68.18,
+        "q": 102.3,
+        "Q": 122.75999999999999,
+        "time": 0.07773540627750072,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 0.45
+    },
+    {
+      "id": 36,
+      "sourceId": 21,
+      "targetId": 24,
+      "typeId": "stairs_down",
+      "direction": "forward",
+      "distance": 2.15,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "blocked",
+      "props": {},
+      "travelTime": 0.2962962962962963,
+      "flowState": {
+        "Q_in": 284.76,
+        "q_spec": 237.3,
+        "Q_out": 162,
+        "hasQueue": true
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 0,
+        "q": 237.3,
+        "Q": 284.76,
+        "time": 0.2962962962962963,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      }
+    },
+    {
+      "id": 37,
+      "sourceId": 24,
+      "targetId": 26,
+      "typeId": "stairs_down",
+      "direction": "forward",
+      "distance": 2.15,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "blocked",
+      "props": {},
+      "travelTime": 0.3395061728395062,
+      "flowState": {
+        "Q_in": 284.76,
+        "q_spec": 237.3,
+        "Q_out": 162,
+        "hasQueue": true
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 0,
+        "q": 237.3,
+        "Q": 284.76,
+        "time": 0.3395061728395062,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      }
+    },
+    {
+      "id": 39,
+      "sourceId": 25,
+      "targetId": 26,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 5.3,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "none",
+      "props": {},
+      "travelTime": 0.07773540627750072,
+      "flowState": {
+        "Q_in": 122.75999999999999,
+        "q_spec": 102.3,
+        "Q_out": 122.75999999999999,
+        "hasQueue": false
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 68.18,
+        "q": 102.3,
+        "Q": 122.75999999999999,
+        "time": 0.07773540627750072,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 0.45
+    },
+    {
+      "id": 40,
+      "sourceId": 26,
+      "targetId": 28,
+      "typeId": "stairs_down",
+      "direction": "forward",
+      "distance": 3,
+      "distanceManual": false,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "blocked",
+      "props": {},
+      "travelTime": 0.38271604938271603,
+      "flowState": {
+        "Q_in": 284.76,
+        "q_spec": 237.3,
+        "Q_out": 162,
+        "hasQueue": true
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 0,
+        "q": 237.3,
+        "Q": 284.76,
+        "time": 0.38271604938271603,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      }
+    },
+    {
+      "id": 42,
+      "sourceId": 27,
+      "targetId": 28,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 5,
+      "distanceManual": false,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "none",
+      "props": {},
+      "travelTime": 0.07333528894103843,
+      "flowState": {
+        "Q_in": 122.75999999999999,
+        "q_spec": 102.3,
+        "Q_out": 122.75999999999999,
+        "hasQueue": false
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 68.18,
+        "q": 102.3,
+        "Q": 122.75999999999999,
+        "time": 0.07333528894103843,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 0.45
+    },
+    {
+      "id": 43,
+      "sourceId": 28,
+      "targetId": 30,
+      "typeId": "stairs_down",
+      "direction": "forward",
+      "distance": 2,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "blocked",
+      "props": {},
+      "travelTime": 0.42592592592592593,
+      "flowState": {
+        "Q_in": 284.76,
+        "q_spec": 237.3,
+        "Q_out": 162,
+        "hasQueue": true
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 0,
+        "q": 237.3,
+        "Q": 284.76,
+        "time": 0.42592592592592593,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 1.7
+    },
+    {
+      "id": 44,
+      "sourceId": 30,
+      "targetId": 2,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 9.35,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "blocked",
+      "props": {},
+      "travelTime": 0.46296296296296297,
+      "flowState": {
+        "Q_in": 258.12,
+        "q_spec": 215.10000000000002,
+        "Q_out": 162,
+        "hasQueue": true
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 0,
+        "q": 215.10000000000002,
+        "Q": 258.12,
+        "time": 0.46296296296296297,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 1.65
+    },
+    {
+      "id": 45,
+      "sourceId": 29,
+      "targetId": 30,
+      "typeId": "normal",
+      "direction": "forward",
+      "distance": 5.7,
+      "distanceManual": true,
+      "speed": 0,
+      "weight": 1,
+      "congestion": "none",
+      "props": {},
+      "travelTime": 0.07112553032193661,
+      "flowState": {
+        "Q_in": 96.11999999999999,
+        "q_spec": 80.1,
+        "Q_out": 96.11999999999999,
+        "hasQueue": false
+      },
+      "calcStats": {
+        "density": 0,
+        "v": 80.14,
+        "q": 80.1,
+        "Q": 96.11999999999999,
+        "time": 0.07112553032193661,
+        "method": "B",
+        "q_max": 164.2,
+        "q_gran": 135
+      },
+      "width": 1
+    }
+  ],
+  "nodeTypes": [
+    {
+      "id": "undefined",
+      "name": "Undefined",
+      "color": "#6e7681"
+    },
+    {
+      "id": "start",
+      "name": "Start",
+      "color": "#3fb950"
+    },
+    {
+      "id": "start2",
+      "name": "Secondary Start",
+      "color": "#39d2c0"
+    },
+    {
+      "id": "waypoint",
+      "name": "Waypoint",
+      "color": "#d29922"
+    },
+    {
+      "id": "exit",
+      "name": "Exit",
+      "color": "#f85149"
+    }
+  ],
+  "connTypes": [
+    {
+      "id": "normal",
+      "name": "Normal",
+      "color": "#58a6ff",
+      "dash": []
+    },
+    {
+      "id": "stairs_up",
+      "name": "Stairs Up",
+      "color": "#bc8cff",
+      "dash": [
+        8,
+        4
+      ]
+    },
+    {
+      "id": "stairs_down",
+      "name": "Stairs Down",
+      "color": "#d29922",
+      "dash": [
+        8,
+        4
+      ]
+    }
+  ]
+}
