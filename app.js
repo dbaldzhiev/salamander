@@ -25,6 +25,9 @@
     ],
     nextNodeId: 1,
     nextConnId: 1,
+    regulations: null, // Loaded from regulations.json
+    calculationMethod: 'A',
+    totalEvacuationTime: 0,
   };
 
   let tool = 'select';  // select | addNode | connect | delete
@@ -73,6 +76,19 @@
   const inpConnWeight = document.getElementById('connWeight');
   const inpConnCongestion = document.getElementById('connCongestion');
   const connCustomPropsDiv = document.getElementById('connCustomProps');
+
+  // Calculation UI
+  const methodRadios = document.querySelectorAll('input[name="calcMethod"]');
+  const totalTimeDisplay = document.getElementById('totalTime');
+  let calcMethod = 'A'; // 'A' or 'B'
+
+  methodRadios.forEach(r => {
+    r.addEventListener('change', (e) => {
+      calcMethod = e.target.value;
+      recalcFireSafety(); // We'll implement this
+      render();
+    });
+  });
 
   // ... (Keep splitConnection, createConnection updates below)
 
@@ -184,6 +200,120 @@
     render();
   }
   window.addEventListener('resize', resizeCanvas);
+
+  // ─── Fire Safety Calculations ─────────────────────────────
+
+  function getSegmentParams(conn) {
+    if (!state.regulations) return null;
+
+    // Map connection type to regulations type
+    let type = 'horiz'; // Default
+    if (conn.typeId === 'stairs_up') type = 'stair_up';
+    else if (conn.typeId === 'stairs_down') type = 'stair_down';
+
+    // Get dimensions and flow
+    // Width: use custom prop or default 1.2m
+    const width = parseFloat(conn.props.width || 1.2);
+    const length = conn.distance || 0;
+
+    // People: use source node's people count
+    const src = state.nodes.find(n => n.id === conn.sourceId);
+    const people = src ? (src.people || 0) : 0;
+
+    return { type, width, length, people };
+  }
+
+  function lookupTable11(segType, density) {
+    if (!state.regulations) return { v: 0, q: 0 };
+    const table = state.regulations.table_11_flow_params.data;
+    const colName = segType === 'horiz' ? 'horiz' :
+      segType === 'stair_down' ? 'stair_down' :
+        segType === 'stair_up' ? 'stair_up' : 'horiz';
+
+    // Find first row where D >= density (conservative)
+    // Table is sorted by D
+    let row = table.find(r => r.D >= density);
+    if (!row) row = table[table.length - 1]; // Cap at max
+
+    const val = row[colName];
+    return { v: val.v, q: val.q };
+  }
+
+  function calcMethodA() {
+    // Method A: Sum of travel times (Length / Speed)
+    // 1. Calculate time for each segment
+    state.connections.forEach(conn => {
+      const p = getSegmentParams(conn);
+      if (!p) { conn.travelTime = 0; return; }
+
+      const area = p.length * p.width;
+      const density = area > 0 ? p.people / area : 0;
+
+      const { v } = lookupTable11(p.type, density);
+
+      // Time in minutes
+      conn.travelTime = v > 0 ? p.length / v : 0;
+
+      // Visualization: Color based on density? 
+      // specific flow q = D * v. Compare to q_max?
+      // For now, keep simple.
+      conn.calcStats = { density, v, time: conn.travelTime };
+    });
+
+    // 2. Find longest path time (Critical Path)
+    // DAG propagation: node.maxTime = max(incoming.maxTime + conn.time)
+
+    // Reset maxTime
+    state.nodes.forEach(n => n.maxTime = 0);
+
+    // Topological sort or multi-pass
+    // Since we handle loops naively in recalcPeople, let's do multi-pass here too
+    for (let pass = 0; pass < state.nodes.length + 1; pass++) {
+      let changed = false;
+      for (const conn of state.connections) {
+        const src = state.nodes.find(n => n.id === conn.sourceId);
+        const tgt = state.nodes.find(n => n.id === conn.targetId);
+        if (!src || !tgt) continue;
+
+        const newTime = (src.maxTime || 0) + (conn.travelTime || 0);
+        if (newTime > (tgt.maxTime || 0)) {
+          tgt.maxTime = newTime;
+          changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+
+    // Total time is the max of all Exit nodes (or all nodes?)
+    // Usually max time to reach an Exit
+    const exitNodes = state.nodes.filter(n => n.typeId === 'exit');
+    let maxT = 0;
+    if (exitNodes.length > 0) {
+      maxT = Math.max(...exitNodes.map(n => n.maxTime));
+    } else {
+      maxT = Math.max(...state.nodes.map(n => n.maxTime));
+    }
+
+    state.totalEvacuationTime = maxT;
+  }
+
+  function recalcFireSafety() {
+    if (!state.regulations) return;
+
+    if (state.calculationMethod === 'A') {
+      calcMethodA();
+    } else {
+      // Method B Placeholder
+      // Fallback to A for now or implement partially
+      calcMethodA();
+      console.warn('Method B not fully implemented yet, fell back to A logic for internal times.');
+    }
+
+    // Update Display
+    if (totalTimeDisplay) {
+      totalTimeDisplay.textContent = state.totalEvacuationTime.toFixed(2);
+    }
+  }
 
   // ─── Rendering ────────────────────────────────────────────
   function render() {
@@ -450,28 +580,37 @@
       drawArrow(bx, by, angle + Math.PI);
     }
 
-    // Mid label
-    const mx = (s.x + e.x) / 2;
-    const my = (s.y + e.y) / 2;
-    const label = ct.name + (congestion !== 'none' ? ` [${congestion}]` : '');
-    ctx.font = `${Math.max(9, 10 * cam.zoom)}px Inter, sans-serif`;
-    const metrics = ctx.measureText(label);
-    const pad = 4;
+    // Label (Distance + Time)
+    const midX = (s.x + e.x) / 2;
+    const midY = (s.y + e.y) / 2;
 
-    ctx.fillStyle = 'rgba(13,17,23,.85)';
-    ctx.fillRect(mx - metrics.width / 2 - pad, my - 7 - pad, metrics.width + pad * 2, 14 + pad * 2);
-    ctx.fillStyle = congColor || ct.color;
+    let label = `${conn.distance}m`;
+    if (conn.calcStats) {
+      // Show Time (min) or Density?
+      // Let's show time if it's significant
+      const t = conn.calcStats.time;
+      if (t !== undefined) label += ` • ${t.toFixed(2)}min`;
+    }
+
+    ctx.fillStyle = '#f0f6fc';
+    ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label, mx, my);
+
+    // Background for text
+    const metrics = ctx.measureText(label);
+    const textW = metrics.width;
+    ctx.save();
+    ctx.fillStyle = 'rgba(13,17,23, 0.8)';
+    ctx.beginPath();
+    ctx.roundRect(midX - textW / 2 - 4, midY - 10, textW + 8, 20, 4);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillText(label, midX, midY);
 
     // Distance label below
-    if (conn.distance != null) {
-      const dLabel = `d=${conn.distance.toFixed(1)}`;
-      ctx.font = `${Math.max(8, 9 * cam.zoom)}px Inter, sans-serif`;
-      ctx.fillStyle = 'rgba(110,118,129,.8)';
-      ctx.fillText(dLabel, mx, my + 14);
-    }
+    // (Old distance label removed to avoid clutter)
   }
 
   function lightenColor(color, percent) {
@@ -690,6 +829,7 @@
       const tgt = state.nodes.find(n => n.id === c.targetId);
       if (src && tgt) c.distance = Math.round(dist(src, tgt) * 10) / 10;
     }
+    recalcFireSafety();
   }
 
   // ─── People Count Calculation ─────────────────────────────
@@ -715,6 +855,8 @@
       }
       if (!changed) break;
     }
+    state.connections.sort((a, b) => b.weight - a.weight); // render broad first?
+    recalcFireSafety();
   }
 
   function calcIncoming(nodeId) {
@@ -1020,6 +1162,7 @@
     if (conn) {
       conn.distance = Number(inpConnDist.value) || 0;
       conn.distanceManual = true;
+      recalcFireSafety();
     }
   });
 
@@ -1041,6 +1184,7 @@
     const conn = state.connections.find(c => c.id === selected.id);
     if (conn) {
       conn.width = Number(inpConnWidth.value) || 1.2;
+      recalcFireSafety();
       render();
     }
   });
@@ -1549,6 +1693,17 @@
 
   // ─── Init ────────────────────────────────────────────────
   function init() {
+    // Load regulations
+    fetch('regulations.json')
+      .then(res => res.json())
+      .then(data => {
+        state.regulations = data;
+        console.log('Regulations loaded:', data);
+        recalcFireSafety();
+        render(); // Re-render after load
+      })
+      .catch(err => console.error('Failed to load regulations:', err));
+
     // Center camera
     const rect = container.getBoundingClientRect();
     cam.x = rect.width / 2;

@@ -26,7 +26,7 @@
         <line x1="18" y1="9" x2="18" y2="15" />
         <line x1="9" y1="18" x2="15" y2="18" />
       </svg>
-      <span>Graph Editor</span>
+      <span>Salamander</span>
     </div>
     <div class="toolbar-tools">
       <button class="tool-btn active" data-tool="select" title="Select & Move (V)">
@@ -93,6 +93,21 @@
   <div id="main">
     <!-- Canvas area -->
     <div id="content-wrapper">
+      <!-- Top Bar for FS Calculations -->
+      <div id="top-bar">
+        <div class="method-toggle">
+          <label>
+            <input type="radio" name="calcMethod" value="A" checked> Method A (Length)
+          </label>
+          <label>
+            <input type="radio" name="calcMethod" value="B"> Method B (Capacity)
+          </label>
+        </div>
+        <div class="result-display">
+          Total Evacuation Time: <span id="totalTime">--</span> min
+        </div>
+      </div>
+
       <div id="canvas-container">
         <canvas id="graphCanvas"></canvas>
         <div id="canvas-hint">Click canvas to add nodes · Drag to move · Scroll to zoom</div>
