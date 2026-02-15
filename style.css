@@ -765,7 +765,7 @@ body {
     display: block;
     height: auto;
   }
-  
+
   .modal-container {
     width: 100%;
     max-width: none;
@@ -775,7 +775,7 @@ body {
     overflow: visible;
   }
 
-  .modal-header, 
+  .modal-header,
   #toolbar,
   #main {
     display: none !important;
@@ -798,7 +798,8 @@ body {
     margin-bottom: 20px;
   }
 
-  .math-content, .stat-card {
+  .math-content,
+  .stat-card {
     background: white;
     border: 1px solid #ddd;
     color: black;
@@ -808,13 +809,122 @@ body {
     color: black;
     background: #f0f0f0;
   }
-  
+
   .report-data-table td {
     color: black;
     border-bottom: 1px solid #ddd;
   }
 
-  h2, h3 {
+  h2,
+  h3 {
     color: black;
   }
+}
+
+/* Bottom Panel & Tables */
+#bottom-panel {
+  height: 300px;
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.panel-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.panel-tab {
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.panel-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.panel-tab.active {
+  background: var(--bg-active);
+  color: var(--accent-blue);
+}
+
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+  max-height: 100%;
+  /* Ensure it doesn't grow beyond flex container */
+}
+
+/* Data Table */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.data-table th,
+.data-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-primary);
+  white-space: nowrap;
+}
+
+.data-table th {
+  background: var(--bg-tertiary);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  font-weight: 600;
+  color: var(--text-secondary);
+  box-shadow: 0 1px 0 var(--border-primary);
+  /* Border for sticky header */
+}
+
+.data-table tr:hover {
+  background: var(--bg-hover);
+  cursor: pointer;
+}
+
+.data-table tr.selected {
+  background: rgba(88, 166, 255, 0.15);
+}
+
+.action-btn-small {
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-btn-small:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }

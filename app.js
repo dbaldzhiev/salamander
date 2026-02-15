@@ -162,10 +162,10 @@
   // Congestion color map
   const CONGESTION_COLORS = {
     none: null,
-    low: '#3fb950',
-    medium: '#d29922',
-    high: '#f85149',
-    blocked: '#6e7681',
+    low: null,
+    medium: null,
+    high: null,
+    blocked: '#f85149', // Red for blocked/bottleneck
   };
   const CONGESTION_WIDTH = {
     none: 2,
@@ -274,6 +274,10 @@
   function calcMethodB() {
     // Method B: Capacity / Throughput (Number of People / (Specific Throughput * Width))
     // t = N / Q, where Q = q * w
+
+    // Reset congestion
+    state.connections.forEach(c => c.congestion = 'none');
+
     state.connections.forEach(conn => {
       const p = getSegmentParams(conn);
       if (!p) { conn.travelTime = 0; return; }
@@ -286,13 +290,35 @@
       // Capacity Q (people / min)
       const Q = q * p.width;
 
+      // Check Congestion limits (q_max)
+      // Get limit from table 11 max or regulations.limits
+      let q_max = 164.2; // default horiz
+      if (state.regulations && state.regulations.limits) {
+        const limits = state.regulations.limits;
+        if (p.type === 'normal') q_max = limits.horizontal.q_max;
+        else if (p.type === 'stairs_up') q_max = limits.stairs_up.q_max;
+        else if (p.type === 'stairs_down') q_max = limits.stairs_down.q_max;
+        else if (p.type.includes('door')) q_max = limits.doors.q_max;
+      }
+
+      // Check specific flow q vs q_max
+      // If q > q_max, it's a bottleneck (Binary State)
+      if (q > q_max) {
+        conn.congestion = 'blocked';
+        conn.travelTime = 9999; // Effectively blocked
+      } else {
+        conn.congestion = 'none';
+      }
+
       // Time in minutes = People / Q
       // If N=0, time=0. 
       // If Q=0 but N>0, time is infinite.
-      if (p.people <= 0) {
-        conn.travelTime = 0;
-      } else {
-        conn.travelTime = Q > 0.1 ? p.people / Q : 9999;
+      if (conn.congestion !== 'blocked') {
+        if (p.people <= 0) {
+          conn.travelTime = 0;
+        } else {
+          conn.travelTime = Q > 0.1 ? p.people / Q : 9999;
+        }
       }
 
       conn.calcStats = { density, v: 0, q, Q, time: conn.travelTime, method: 'B' };
@@ -530,12 +556,8 @@
     const s = worldToScreen(src.x, src.y);
     const e = worldToScreen(tgt.x, tgt.y);
 
-    // For blocked congestion, draw X marks
-    if (congestion === 'blocked' && !isSelected) {
-      ctx.setLineDash([4, 8]);
-    } else {
-      ctx.setLineDash(ct.dash || []);
-    }
+    // Dash pattern based on type
+    ctx.setLineDash(ct.dash || []);
 
     // Line (Transparent)
     ctx.save();
@@ -544,8 +566,30 @@
     ctx.strokeStyle = lineColor;
     ctx.lineWidth = pixelWidth;
     ctx.lineCap = 'butt'; // clean ends for thick lines
-    ctx.moveTo(s.x, s.y);
-    ctx.lineTo(e.x, e.y);
+
+    // Zig-Zag for Congestion
+    if (congestion === 'high' || congestion === 'blocked') {
+      const zigzagStep = 10;
+      const zigzagAmp = pixelWidth / 2 + 3;
+      const dx = e.x - s.x;
+      const dy = e.y - s.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const nx = -dy / len;
+      const ny = dx / len;
+
+      ctx.moveTo(s.x, s.y);
+      for (let d = 0; d < len; d += zigzagStep) {
+        const side = (d / zigzagStep) % 2 === 0 ? 1 : -1;
+        const px = s.x + (dx / len) * d + nx * side * zigzagAmp;
+        const py = s.y + (dy / len) * d + ny * side * zigzagAmp;
+        ctx.lineTo(px, py);
+      }
+      ctx.lineTo(e.x, e.y);
+    } else {
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(e.x, e.y);
+    }
+
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.lineCap = 'round'; // reset
@@ -1035,6 +1079,7 @@
         <td>${escHtml(n.name)}</td>
         <td>${escHtml(typeName)}</td>
         <td>${n.people || 0}</td>
+        <td>${(n.maxTime || 0).toFixed(2)}</td>
         <td>${n.x}</td>
         <td>${n.y}</td>
       </tr>`;
@@ -1047,13 +1092,25 @@
       const isSel = selected && selected.type === 'connection' && selected.id === c.id;
       const cType = state.connTypes.find(t => t.id === c.typeId);
       const cTypeName = cType ? cType.name : c.typeId;
+
+      const stats = c.calcStats || { density: 0, v: 0, q: 0, Q: 0, time: 0 };
+      const width = c.width || 1.2;
+      const area = width * c.distance;
+      const timeStr = stats.time >= 9999 ? 'Inf' : (stats.time || 0).toFixed(2);
+
       cHtml += `<tr class="${isSel ? 'selected' : ''}" onclick="window.selectConnection(${c.id})">
         <td>${c.id}</td>
         <td>${c.sourceId}</td>
         <td>${c.targetId}</td>
         <td>${escHtml(cTypeName)}</td>
-        <td>${c.distance.toFixed(1)}</td>
-        <td>${c.speed || '-'}</td>
+        <td>${width.toFixed(2)}</td>
+        <td>${area.toFixed(2)}</td>
+        <td>${c.distance.toFixed(2)}</td>
+        <td>${stats.density.toFixed(2)}</td>
+        <td>${(stats.q || 0).toFixed(2)}</td>
+        <td>${(stats.Q || 0).toFixed(2)}</td>
+        <td>${(stats.v || 0).toFixed(2)}</td>
+        <td>${timeStr}</td>
         <td>${c.congestion || 'none'}</td>
       </tr>`;
     }
@@ -1136,18 +1193,22 @@
     let csvContent = "data:text/csv;charset=utf-8,";
 
     if (isNodes) {
-      csvContent += "ID,Name,Type,People,X,Y\n";
+      csvContent += "ID,Name,Type,People,MaxTime,X,Y\n";
       state.nodes.forEach(n => {
         const type = state.nodeTypes.find(t => t.id === n.typeId);
         const tName = type ? type.name : n.typeId;
-        csvContent += `${n.id},"${n.name}","${tName}",${n.people || 0},${n.x},${n.y}\n`;
+        csvContent += `${n.id},"${n.name}","${tName}",${n.people || 0},${(n.maxTime || 0).toFixed(2)},${n.x},${n.y}\n`;
       });
     } else {
-      csvContent += "ID,Source,Target,Type,Distance,Speed,Congestion\n";
+      csvContent += "ID,Source,Target,Type,Width,Area,Distance,Density,SpFlow,Capacity,Speed,Time,Congestion\n";
       state.connections.forEach(c => {
         const type = state.connTypes.find(t => t.id === c.typeId);
         const tName = type ? type.name : c.typeId;
-        csvContent += `${c.id},${c.sourceId},${c.targetId},"${tName}",${c.distance},${c.speed || 0},"${c.congestion}"\n`;
+        const stats = c.calcStats || { density: 0, v: 0, q: 0, Q: 0, time: 0 };
+        const width = c.width || 1.2;
+        const area = width * c.distance;
+
+        csvContent += `${c.id},${c.sourceId},${c.targetId},"${tName}",${width.toFixed(2)},${area.toFixed(2)},${c.distance.toFixed(2)},${stats.density.toFixed(2)},${(stats.q || 0).toFixed(2)},${(stats.Q || 0).toFixed(2)},${(stats.v || 0).toFixed(2)},${(stats.time || 0).toFixed(2)},"${c.congestion}"\n`;
       });
     }
 
