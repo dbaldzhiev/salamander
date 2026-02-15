@@ -92,9 +92,80 @@
   <!-- Main layout -->
   <div id="main">
     <!-- Canvas area -->
-    <div id="canvas-container">
-      <canvas id="graphCanvas"></canvas>
-      <div id="canvas-hint">Click canvas to add nodes · Drag to move · Scroll to zoom</div>
+    <div id="content-wrapper">
+      <div id="canvas-container">
+        <canvas id="graphCanvas"></canvas>
+        <div id="canvas-hint">Click canvas to add nodes · Drag to move · Scroll to zoom</div>
+      </div>
+
+      <div id="bottom-panel">
+        <div class="panel-header">
+          <div class="panel-tabs">
+            <button class="panel-tab active" data-tab="nodes">Nodes</button>
+            <button class="panel-tab" data-tab="connections">Connections</button>
+            <button class="panel-tab" data-tab="regulations">Regulations</button>
+          </div>
+          <div class="panel-actions">
+            <button class="action-btn-small" id="btnExportCSV" title="Export to CSV">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="panel-content" id="panel-nodes">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>People</th>
+                <th>X</th>
+                <th>Y</th>
+              </tr>
+            </thead>
+            <tbody id="nodesTableBody"></tbody>
+          </table>
+        </div>
+        <div class="panel-content" id="panel-connections" style="display:none">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Source</th>
+                <th>Target</th>
+                <th>Type</th>
+                <th>Width (m)</th>
+                <th>Dist (m)</th>
+                <th>Speed (m/s)</th>
+                <th>Congestion</th>
+              </tr>
+            </thead>
+            <tbody id="connectionsTableBody"></tbody>
+          </table>
+        </div>
+        <div class="panel-content" id="panel-regulations" style="display:none">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Density (p/m²)</th>
+                <th>Horizontal v (m/min)</th>
+                <th>Horizontal q (p/m/min)</th>
+                <th>Stair Down v</th>
+                <th>Stair Down q</th>
+                <th>Stair Up v</th>
+                <th>Stair Up q</th>
+                <th>Door v</th>
+                <th>Door q</th>
+              </tr>
+            </thead>
+            <tbody id="regulationsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- Properties sidebar -->
@@ -170,6 +241,10 @@
           <label for="connDistance">Distance</label>
           <input type="number" id="connDistance" step="0.1" min="0">
           <small class="prop-hint">Auto-filled from positions, editable to override</small>
+        </div>
+        <div class="prop-group">
+          <label for="connWidth">Width (m)</label>
+          <input type="number" id="connWidth" step="0.1" min="0.1" placeholder="1.2">
         </div>
         <div class="prop-group">
           <label for="connSpeed">Speed</label>

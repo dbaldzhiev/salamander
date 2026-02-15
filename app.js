@@ -40,6 +40,7 @@
   const NODE_RADIUS = 24;
   const HIT_MARGIN = 8;
   const GRID_SIZE = 40;
+  const PIXELS_PER_METER = 40; // 1m symbols 40px (1.2m ~= 48px node diam)
 
   function snapToGrid(v) {
     return Math.round(v / GRID_SIZE) * GRID_SIZE;
@@ -67,15 +68,70 @@
   const inpConnType = document.getElementById('connType');
   const inpConnDir = document.getElementById('connDirection');
   const inpConnDist = document.getElementById('connDistance');
+  const inpConnWidth = document.getElementById('connWidth');
   const inpConnSpeed = document.getElementById('connSpeed');
   const inpConnWeight = document.getElementById('connWeight');
   const inpConnCongestion = document.getElementById('connCongestion');
   const connCustomPropsDiv = document.getElementById('connCustomProps');
 
+  // ... (Keep splitConnection, createConnection updates below)
+
+  function updateSidebar() {
+    sidebarEmpty.style.display = 'none';
+    sidebarNode.style.display = 'none';
+    sidebarConn.style.display = 'none';
+
+    if (!selected) {
+      sidebarEmpty.style.display = 'flex';
+      return;
+    }
+
+    if (selected.type === 'node') {
+      // ... (existing node logic)
+      const node = state.nodes.find(n => n.id === selected.id);
+      if (!node) { sidebarEmpty.style.display = 'flex'; return; }
+      sidebarNode.style.display = 'block';
+      inpNodeName.value = node.name;
+      populateTypeSelect(inpNodeType, state.nodeTypes, node.typeId);
+      inpNodeX.value = node.x;
+      inpNodeY.value = node.y;
+      const isSource = ['start', 'start2'].includes(node.typeId);
+      inpNodePeople.value = node.people || '';
+      inpNodePeople.readOnly = !isSource;
+      if (isSource) {
+        peopleHint.textContent = 'Enter number of people at this origin';
+      } else {
+        peopleHint.textContent = 'Auto-calculated from incoming connections';
+      }
+      renderCustomProps(nodeCustomPropsDiv, node.props, 'node');
+    }
+
+    if (selected.type === 'connection') {
+      const conn = state.connections.find(c => c.id === selected.id);
+      if (!conn) { sidebarEmpty.style.display = 'flex'; return; }
+      sidebarConn.style.display = 'block';
+      populateTypeSelect(inpConnType, state.connTypes, conn.typeId);
+      inpConnDir.value = conn.direction || 'forward';
+      inpConnDist.value = conn.distance;
+      inpConnWidth.value = conn.width || 1.2; // New input
+      inpConnSpeed.value = conn.speed || '';
+      inpConnWeight.value = conn.weight || '';
+      inpConnCongestion.value = conn.congestion || 'none';
+      renderCustomProps(connCustomPropsDiv, conn.props, 'connection');
+    }
+  }
+
   // Node people count
   const inpNodePeople = document.getElementById('nodePeople');
   const peopleHint = document.getElementById('peopleHint');
   const peopleGroup = document.getElementById('peopleGroup');
+
+  // Bottom Panel Refs
+  const nodesTableBody = document.getElementById('nodesTableBody');
+  const connectionsTableBody = document.getElementById('connectionsTableBody');
+  const panelNodes = document.getElementById('panel-nodes');
+  const panelConnections = document.getElementById('panel-connections');
+  const panelTabs = document.querySelectorAll('.panel-tab');
 
   // Congestion color map
   const CONGESTION_COLORS = {
@@ -168,6 +224,9 @@
     for (const node of state.nodes) {
       drawNode(node);
     }
+
+    // Update Table
+    renderTable();
   }
 
   function drawGrid(w, h) {
@@ -291,10 +350,14 @@
     const dir = conn.direction || 'forward';
     const congestion = conn.congestion || 'none';
 
+    // Width visualization
+    const widthMeters = conn.width || 1.2;
+    const pixelWidth = Math.max(2, widthMeters * PIXELS_PER_METER * cam.zoom);
+
     // Determine color: congestion overrides type color
     const congColor = CONGESTION_COLORS[congestion];
     const lineColor = isSelected ? '#fff' : (congColor || ct.color);
-    const lineWidth = isSelected ? 3 : (CONGESTION_WIDTH[congestion] || 2);
+    // const lineWidth = isSelected ? 3 : (CONGESTION_WIDTH[congestion] || 2); 
 
     const s = worldToScreen(src.x, src.y);
     const e = worldToScreen(tgt.x, tgt.y);
@@ -306,19 +369,62 @@
       ctx.setLineDash(ct.dash || []);
     }
 
-    // Line
+    // Line (Transparent)
+    ctx.save();
+    ctx.globalAlpha = 0.6; // Make connection line semi-transparent
     ctx.beginPath();
     ctx.strokeStyle = lineColor;
-    ctx.lineWidth = lineWidth;
+    ctx.lineWidth = pixelWidth;
+    ctx.lineCap = 'butt'; // clean ends for thick lines
     ctx.moveTo(s.x, s.y);
     ctx.lineTo(e.x, e.y);
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.lineCap = 'round'; // reset
+    ctx.restore(); // Restore alpha
 
-    // Arrows based on direction
+    // Highlight border if selected (since color is white, maybe dark border?)
+    if (isSelected) {
+      ctx.beginPath();
+      ctx.strokeStyle = '#58a6ff'; // selection blue
+      ctx.lineWidth = 1;
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(e.x, e.y);
+      ctx.stroke();
+    }
+
+    // Width Handle (only if selected) - Moved to 1/3 position
+    if (isSelected) {
+      // Use 0.35 to be away from center (0.5) where text is
+      const t = 0.35;
+      const mx = s.x + (e.x - s.x) * t;
+      const my = s.y + (e.y - s.y) * t;
+
+      // Perpendicular vector
+      const dx = e.x - s.x;
+      const dy = e.y - s.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const nx = -dy / len;
+      const ny = dx / len;
+
+      // Handle position: offset by half width + padding
+      const handleDist = pixelWidth / 2 + 10;
+      const hx = mx + nx * handleDist;
+      const hy = my + ny * handleDist;
+
+      ctx.beginPath();
+      ctx.arc(hx, hy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Arrows based on direction (adjust size for width)
     const angle = Math.atan2(e.y - s.y, e.x - s.x);
     const arrowR = NODE_RADIUS * cam.zoom + 4;
-    const arrowLen = 10 * cam.zoom;
+    const arrowLen = Math.max(10 * cam.zoom, pixelWidth * 0.8);
 
     function drawArrow(tipX, tipY, ang) {
       ctx.beginPath();
@@ -718,6 +824,144 @@
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  // ─── Table Rendering ─────────────────────────────────────
+  function renderTable() {
+    // 1. Nodes Table
+    let nHtml = '';
+    for (const n of state.nodes) {
+      const isSel = selected && selected.type === 'node' && selected.id === n.id;
+      const type = state.nodeTypes.find(t => t.id === n.typeId);
+      const typeName = type ? type.name : n.typeId;
+      nHtml += `<tr class="${isSel ? 'selected' : ''}" onclick="window.selectNode(${n.id})">
+        <td>${n.id}</td>
+        <td>${escHtml(n.name)}</td>
+        <td>${escHtml(typeName)}</td>
+        <td>${n.people || 0}</td>
+        <td>${n.x}</td>
+        <td>${n.y}</td>
+      </tr>`;
+    }
+    nodesTableBody.innerHTML = nHtml;
+
+    // 2. Connections Table
+    let cHtml = '';
+    for (const c of state.connections) {
+      const isSel = selected && selected.type === 'connection' && selected.id === c.id;
+      const cType = state.connTypes.find(t => t.id === c.typeId);
+      const cTypeName = cType ? cType.name : c.typeId;
+      cHtml += `<tr class="${isSel ? 'selected' : ''}" onclick="window.selectConnection(${c.id})">
+        <td>${c.id}</td>
+        <td>${c.sourceId}</td>
+        <td>${c.targetId}</td>
+        <td>${escHtml(cTypeName)}</td>
+        <td>${c.distance.toFixed(1)}</td>
+        <td>${c.speed || '-'}</td>
+        <td>${c.congestion || 'none'}</td>
+      </tr>`;
+    }
+    connectionsTableBody.innerHTML = cHtml;
+  }
+
+  // Expose selection helpers to global scope for row clicks
+  window.selectNode = (id) => {
+    selectItem({ type: 'node', id: id });
+    render(); // force render
+  };
+  window.selectConnection = (id) => {
+    selectItem({ type: 'connection', id: id });
+    render(); // force render
+  };
+
+
+  // ─── Regulations Data ─────────────────────────────────────
+  let regulationsData = null;
+  const regulationsTableBody = document.getElementById('regulationsTableBody');
+  const panelRegulations = document.getElementById('panel-regulations');
+
+  fetch('regulations.json')
+    .then(res => res.json())
+    .then(data => {
+      regulationsData = data;
+      renderRegulationsTable();
+    })
+    .catch(err => console.error('Failed to load regulations:', err));
+
+  function renderRegulationsTable() {
+    if (!regulationsData || !regulationsData.table_11_flow_params) return;
+
+    let html = '';
+    const rows = regulationsData.table_11_flow_params.data;
+
+    for (const row of rows) {
+      html += `<tr>
+            <td>${row.D}</td>
+            <td>${row.horiz.v}</td>
+            <td>${row.horiz.q}</td>
+            <td>${row.stair_down.v}</td>
+            <td>${row.stair_down.q}</td>
+            <td>${row.stair_up.v}</td>
+            <td>${row.stair_up.q}</td>
+            <td>${row.door_wide.v}</td>
+            <td>${row.door_wide.q}</td>
+        </tr>`;
+    }
+    regulationsTableBody.innerHTML = html;
+  }
+
+  // ─── Panel Tabs ──────────────────────────────────────────
+  panelTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      // Toggle active state
+      panelTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      // Show/Hide Content
+      const target = tab.dataset.tab;
+      panelNodes.style.display = 'none';
+      panelConnections.style.display = 'none';
+      panelRegulations.style.display = 'none';
+
+      if (target === 'nodes') {
+        panelNodes.style.display = 'block';
+      } else if (target === 'connections') {
+        panelConnections.style.display = 'block';
+      } else if (target === 'regulations') {
+        panelRegulations.style.display = 'block';
+      }
+    });
+  });
+
+  // CSV Export
+  document.getElementById('btnExportCSV').addEventListener('click', () => {
+    // Determine active tab
+    const isNodes = panelNodes.style.display !== 'none';
+    let csvContent = "data:text/csv;charset=utf-8,";
+
+    if (isNodes) {
+      csvContent += "ID,Name,Type,People,X,Y\n";
+      state.nodes.forEach(n => {
+        const type = state.nodeTypes.find(t => t.id === n.typeId);
+        const tName = type ? type.name : n.typeId;
+        csvContent += `${n.id},"${n.name}","${tName}",${n.people || 0},${n.x},${n.y}\n`;
+      });
+    } else {
+      csvContent += "ID,Source,Target,Type,Distance,Speed,Congestion\n";
+      state.connections.forEach(c => {
+        const type = state.connTypes.find(t => t.id === c.typeId);
+        const tName = type ? type.name : c.typeId;
+        csvContent += `${c.id},${c.sourceId},${c.targetId},"${tName}",${c.distance},${c.speed || 0},"${c.congestion}"\n`;
+      });
+    }
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", isNodes ? "nodes.csv" : "connections.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  });
+
   // ─── Sidebar Input Handlers ──────────────────────────────
   inpNodeName.addEventListener('input', () => {
     if (!selected || selected.type !== 'node') return;
@@ -773,6 +1017,16 @@
     if (!selected || selected.type !== 'connection') return;
     const conn = state.connections.find(c => c.id === selected.id);
     if (conn) conn.weight = Number(inpConnWeight.value) || 1;
+  });
+
+  // Width handler
+  inpConnWidth.addEventListener('change', () => {
+    if (!selected || selected.type !== 'connection') return;
+    const conn = state.connections.find(c => c.id === selected.id);
+    if (conn) {
+      conn.width = Number(inpConnWidth.value) || 1.2;
+      render();
+    }
   });
 
   // People count handler
@@ -896,6 +1150,37 @@
   // ─── Mouse Interactions ──────────────────────────────────
   let tempMouseWorld = null;
 
+  function getConnectionHandlePos(conn) {
+    const src = state.nodes.find(n => n.id === conn.sourceId);
+    const tgt = state.nodes.find(n => n.id === conn.targetId);
+    if (!src || !tgt) return null;
+
+    const widthMeters = conn.width || 1.2;
+    const pixelWidth = Math.max(2, widthMeters * PIXELS_PER_METER * cam.zoom);
+
+    const s = worldToScreen(src.x, src.y);
+    const e = worldToScreen(tgt.x, tgt.y);
+
+    // Match drawing logic: 0.35
+    const t = 0.35;
+    const mx = s.x + (e.x - s.x) * t;
+    const my = s.y + (e.y - s.y) * t;
+
+    const dx = e.x - s.x;
+    const dy = e.y - s.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) return { x: mx, y: my }; // should not happen
+
+    const nx = -dy / len;
+    const ny = dx / len;
+
+    const handleDist = pixelWidth / 2 + 10;
+    return {
+      x: mx + nx * handleDist,
+      y: my + ny * handleDist
+    };
+  }
+
   canvas.addEventListener('mousedown', (e) => {
     const rect = canvas.getBoundingClientRect();
     const sx = e.clientX - rect.left;
@@ -913,12 +1198,28 @@
 
     if (e.button !== 0) return;
 
+    // Check width handle click first (if connection selected)
+    if (selected && selected.type === 'connection') {
+      const conn = state.connections.find(c => c.id === selected.id);
+      if (conn) {
+        const hPos = getConnectionHandlePos(conn);
+        if (hPos) {
+          const d = Math.sqrt((sx - hPos.x) ** 2 + (sy - hPos.y) ** 2);
+          if (d <= 8) { // 5 radius + margin
+            dragging = { type: 'width', connId: conn.id };
+            return;
+          }
+        }
+      }
+    }
+
     switch (tool) {
       case 'select': {
         const hitNode = hitTestNode(w.x, w.y);
         if (hitNode) {
           selectItem({ type: 'node', id: hitNode.id });
           dragging = {
+            type: 'node',
             nodeId: hitNode.id,
             offsetX: w.x - hitNode.x,
             offsetY: w.y - hitNode.y,
@@ -997,17 +1298,73 @@
     }
 
     if (dragging) {
-      const node = state.nodes.find(n => n.id === dragging.nodeId);
-      if (node) {
-        node.x = snapToGrid(tempMouseWorld.x - dragging.offsetX);
-        node.y = snapToGrid(tempMouseWorld.y - dragging.offsetY);
-        updateConnectionDistances();
-        if (selected && selected.type === 'node' && selected.id === node.id) {
-          inpNodeX.value = node.x;
-          inpNodeY.value = node.y;
-          // Update conn distance in sidebar if needed
+      if (dragging.type === 'node') {
+        const node = state.nodes.find(n => n.id === dragging.nodeId);
+        if (node) {
+          node.x = snapToGrid(tempMouseWorld.x - dragging.offsetX);
+          node.y = snapToGrid(tempMouseWorld.y - dragging.offsetY);
+          updateConnectionDistances();
+          if (selected && selected.type === 'node' && selected.id === node.id) {
+            inpNodeX.value = node.x;
+            inpNodeY.value = node.y;
+          }
+          render();
         }
-        render();
+      } else if (dragging.type === 'width') {
+        const conn = state.connections.find(c => c.id === dragging.connId);
+        if (conn) {
+          const src = state.nodes.find(n => n.id === conn.sourceId);
+          const tgt = state.nodes.find(n => n.id === conn.targetId);
+          if (src && tgt) {
+            const s = worldToScreen(src.x, src.y);
+            const e = worldToScreen(tgt.x, tgt.y);
+            // Dist from point to line segment (unclamped infinite line is fine for width)
+            // Actually standard layout is P to Line.
+            // Let's use simple distance from center line
+            // But we need signed distance or just magnitude?
+            // Magnitude is fine, but we need to subtract the margin handle was at?
+            // No, just set width based on distance from center * 2
+
+            // Distance from mouse (sx,sy) to line (s)-(e)
+            const A = sx - s.x;
+            const B = sy - s.y;
+            const C = e.x - s.x;
+            const D = e.y - s.y;
+
+            const dot = A * C + B * D;
+            const lenSq = C * C + D * D;
+            let param = -1;
+            if (lenSq !== 0) param = dot / lenSq;
+
+            let xx, yy;
+            if (param < 0) {
+              xx = s.x; yy = s.y;
+            } else if (param > 1) {
+              xx = e.x; yy = e.y;
+            } else {
+              xx = s.x + param * C;
+              yy = s.y + param * D;
+            }
+
+            const dx = sx - xx;
+            const dy = sy - yy;
+            const distPx = Math.sqrt(dx * dx + dy * dy);
+
+            // Radius is distPx. So width is distPx * 2. 
+            // But handle is at edge + 10px padding.
+            // So halfWidth = distPx - 10
+            const halfWidthPx = Math.max(1, distPx - 10);
+            const totalWidthPx = halfWidthPx * 2;
+
+            // Convert back to meters
+            const widthMeters = totalWidthPx / (PIXELS_PER_METER * cam.zoom);
+            conn.width = Math.round(widthMeters * 10) / 10;
+            if (conn.width < 0.1) conn.width = 0.1;
+
+            inpConnWidth.value = conn.width;
+            render();
+          }
+        }
       }
       return;
     }

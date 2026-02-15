@@ -1,0 +1,514 @@
+{
+    "_meta": {
+        "source": "Ordinance Iz-1971, Annex 8a (DV br. 91/2024)",
+        "description": "Bulgarian Fire Safety Evacuation Norms",
+        "version": "1.0",
+        "generated_date": "2026-02-07"
+    },
+    "constants": {
+        "boundary_density": 9.2,
+        "max_occupant_density_limit": 9.2,
+        "door_width_threshold": 1.6,
+        "wall_thickness_threshold": 0.7
+    },
+    "limits": {
+        "description": "Maximum physically possible throughput (q_max) and congestion boundary throughput (q_gran). Used to detect bottlenecks (Annex 8a, Section III, p.5).",
+        "horizontal": {
+            "q_max": 164.2,
+            "q_gran": 135.0,
+            "v_gran": 14.67
+        },
+        "stairs_down": {
+            "q_max": 159.5,
+            "q_gran": 60.4,
+            "v_gran": 6.57
+        },
+        "stairs_up": {
+            "q_max": 119.7,
+            "q_gran": 111.0,
+            "v_gran": 12.06
+        },
+        "doors": {
+            "q_max": 199.1,
+            "q_gran": 85.0,
+            "v_gran": 9.24
+        }
+    },
+    "permissible_time_limits": {
+        "description": "Base permissible evacuation times (t_perm) in minutes based on Article 60 and 61[cite: 130, 146].",
+        "buildings_under_25m": {
+            "fire_resistance_I_II": 6.0,
+            "fire_resistance_III": 3.0,
+            "fire_resistance_IV_V": 1.0
+        },
+        "buildings_over_25m": {
+            "to_staircase_entry": 1.5
+        },
+        "assembly_halls_over_100_people": {
+            "fire_resistance_I_II": 2.0,
+            "fire_resistance_III": 1.0,
+            "fire_resistance_IV_V": 1.0,
+            "voice_alarm_system_multiplier": 1.5
+        },
+        "production_shelves": {
+            "cat_F5A_F5B": 0.5,
+            "cat_F5V": 1.0
+        }
+    },
+    "table_11_flow_params": {
+        "description": "Speed (v) [m/min] and Specific Throughput (q) [pers/m.min] based on Density (D) [pers/m2]. Used for interpolating flow (Annex 8a, Table 11).",
+        "columns": [
+            "D",
+            "v_horiz",
+            "q_horiz",
+            "v_stair_down",
+            "q_stair_down",
+            "v_stair_up",
+            "q_stair_up",
+            "v_door_wide",
+            "q_door_wide"
+        ],
+        "data": [
+            {
+                "D": 0.1,
+                "horiz": {
+                    "v": 100.0,
+                    "q": 10.0
+                },
+                "stair_down": {
+                    "v": 100.0,
+                    "q": 10.0
+                },
+                "stair_up": {
+                    "v": 60.0,
+                    "q": 6.0
+                },
+                "door_wide": {
+                    "v": 100.0,
+                    "q": 10.0
+                }
+            },
+            {
+                "D": 0.5,
+                "horiz": {
+                    "v": 100.0,
+                    "q": 50.0
+                },
+                "stair_down": {
+                    "v": 100.0,
+                    "q": 50.0
+                },
+                "stair_up": {
+                    "v": 60.0,
+                    "q": 30.0
+                },
+                "door_wide": {
+                    "v": 100.0,
+                    "q": 50.0
+                }
+            },
+            {
+                "D": 1.0,
+                "horiz": {
+                    "v": 80.14,
+                    "q": 80.1
+                },
+                "stair_down": {
+                    "v": 95.3,
+                    "q": 95.3
+                },
+                "stair_up": {
+                    "v": 52.67,
+                    "q": 52.7
+                },
+                "door_wide": {
+                    "v": 87.3,
+                    "q": 87.3
+                }
+            },
+            {
+                "D": 1.5,
+                "horiz": {
+                    "v": 68.18,
+                    "q": 102.3
+                },
+                "stair_down": {
+                    "v": 79.13,
+                    "q": 118.7
+                },
+                "stair_up": {
+                    "v": 45.25,
+                    "q": 67.9
+                },
+                "door_wide": {
+                    "v": 75.33,
+                    "q": 113.0
+                }
+            },
+            {
+                "D": 2.0,
+                "horiz": {
+                    "v": 59.69,
+                    "q": 119.4
+                },
+                "stair_down": {
+                    "v": 67.6,
+                    "q": 135.2
+                },
+                "stair_up": {
+                    "v": 39.99,
+                    "q": 80.0
+                },
+                "door_wide": {
+                    "v": 66.85,
+                    "q": 133.7
+                }
+            },
+            {
+                "D": 2.5,
+                "horiz": {
+                    "v": 53.11,
+                    "q": 132.8
+                },
+                "stair_down": {
+                    "v": 58.68,
+                    "q": 146.7
+                },
+                "stair_up": {
+                    "v": 35.9,
+                    "q": 89.8
+                },
+                "door_wide": {
+                    "v": 60.28,
+                    "q": 150.7
+                }
+            },
+            {
+                "D": 3.0,
+                "horiz": {
+                    "v": 47.73,
+                    "q": 143.2
+                },
+                "stair_down": {
+                    "v": 51.4,
+                    "q": 154.2
+                },
+                "stair_up": {
+                    "v": 32.57,
+                    "q": 97.7
+                },
+                "door_wide": {
+                    "v": 54.87,
+                    "q": 164.6
+                }
+            },
+            {
+                "D": 3.5,
+                "horiz": {
+                    "v": 43.18,
+                    "q": 151.1
+                },
+                "stair_down": {
+                    "v": 45.23,
+                    "q": 158.3
+                },
+                "stair_up": {
+                    "v": 29.75,
+                    "q": 104.1
+                },
+                "door_wide": {
+                    "v": 50.34,
+                    "q": 176.2
+                }
+            },
+            {
+                "D": 4.0,
+                "horiz": {
+                    "v": 39.24,
+                    "q": 157.0
+                },
+                "stair_down": {
+                    "v": 39.88,
+                    "q": 159.5
+                },
+                "stair_up": {
+                    "v": 27.3,
+                    "q": 109.2
+                },
+                "door_wide": {
+                    "v": 46.4,
+                    "q": 185.6
+                }
+            },
+            {
+                "D": 4.5,
+                "horiz": {
+                    "v": 35.77,
+                    "q": 160.9
+                },
+                "stair_down": {
+                    "v": 35.18,
+                    "q": 158.3
+                },
+                "stair_up": {
+                    "v": 25.15,
+                    "q": 113.2
+                },
+                "door_wide": {
+                    "v": 42.91,
+                    "q": 193.1
+                }
+            },
+            {
+                "D": 5.0,
+                "horiz": {
+                    "v": 32.66,
+                    "q": 163.3
+                },
+                "stair_down": {
+                    "v": 30.96,
+                    "q": 154.8
+                },
+                "stair_up": {
+                    "v": 23.22,
+                    "q": 116.1
+                },
+                "door_wide": {
+                    "v": 39.82,
+                    "q": 199.1
+                }
+            },
+            {
+                "D": 5.5,
+                "horiz": {
+                    "v": 29.85,
+                    "q": 164.2
+                },
+                "stair_down": {
+                    "v": 27.15,
+                    "q": 149.3
+                },
+                "stair_up": {
+                    "v": 21.47,
+                    "q": 118.1
+                },
+                "door_wide": {
+                    "v": 35.35,
+                    "q": 194.4
+                }
+            },
+            {
+                "D": 6.0,
+                "horiz": {
+                    "v": 27.28,
+                    "q": 163.7
+                },
+                "stair_down": {
+                    "v": 23.67,
+                    "q": 142.0
+                },
+                "stair_up": {
+                    "v": 19.88,
+                    "q": 119.3
+                },
+                "door_wide": {
+                    "v": 32.02,
+                    "q": 192.1
+                }
+            },
+            {
+                "D": 6.5,
+                "horiz": {
+                    "v": 24.92,
+                    "q": 162.0
+                },
+                "stair_down": {
+                    "v": 20.46,
+                    "q": 133.0
+                },
+                "stair_up": {
+                    "v": 18.42,
+                    "q": 119.7
+                },
+                "door_wide": {
+                    "v": 29.03,
+                    "q": 188.7
+                }
+            },
+            {
+                "D": 7.0,
+                "horiz": {
+                    "v": 22.73,
+                    "q": 159.1
+                },
+                "stair_down": {
+                    "v": 17.5,
+                    "q": 122.5
+                },
+                "stair_up": {
+                    "v": 17.06,
+                    "q": 119.4
+                },
+                "door_wide": {
+                    "v": 26.3,
+                    "q": 184.1
+                }
+            },
+            {
+                "D": 7.5,
+                "horiz": {
+                    "v": 20.7,
+                    "q": 155.2
+                },
+                "stair_down": {
+                    "v": 14.75,
+                    "q": 110.6
+                },
+                "stair_up": {
+                    "v": 15.8,
+                    "q": 118.5
+                },
+                "door_wide": {
+                    "v": 23.81,
+                    "q": 178.6
+                }
+            },
+            {
+                "D": 8.0,
+                "horiz": {
+                    "v": 18.79,
+                    "q": 150.3
+                },
+                "stair_down": {
+                    "v": 12.16,
+                    "q": 97.3
+                },
+                "stair_up": {
+                    "v": 14.62,
+                    "q": 116.9
+                },
+                "door_wide": {
+                    "v": 21.54,
+                    "q": 172.3
+                }
+            },
+            {
+                "D": 8.5,
+                "horiz": {
+                    "v": 17.0,
+                    "q": 144.5
+                },
+                "stair_down": {
+                    "v": 9.74,
+                    "q": 82.8
+                },
+                "stair_up": {
+                    "v": 13.51,
+                    "q": 114.8
+                },
+                "door_wide": {
+                    "v": 19.45,
+                    "q": 165.3
+                }
+            },
+            {
+                "D": 9.0,
+                "horiz": {
+                    "v": 15.32,
+                    "q": 137.9
+                },
+                "stair_down": {
+                    "v": 7.44,
+                    "q": 67.0
+                },
+                "stair_up": {
+                    "v": 12.46,
+                    "q": 112.2
+                },
+                "door_wide": {
+                    "v": 9.44,
+                    "q": 85.0
+                }
+            },
+            {
+                "D": 9.2,
+                "horiz": {
+                    "v": 14.67,
+                    "q": 135.0
+                },
+                "stair_down": {
+                    "v": 6.57,
+                    "q": 60.4
+                },
+                "stair_up": {
+                    "v": 12.06,
+                    "q": 111.0
+                },
+                "door_wide": {
+                    "v": 9.24,
+                    "q": 85.0
+                }
+            }
+        ]
+    },
+    "table_12_narrow_doors": {
+        "description": "Specific Throughput (q) and Speed (v) at Boundary Density (9.2) for door widths between 0.6m and 1.6m (Annex 8a, Table 12). [cite_start]Use linear interpolation between these rows[cite: 122, 206].",
+        "data": [
+            {
+                "width": 0.6,
+                "q": 47.5,
+                "v": 5.16
+            },
+            {
+                "width": 0.7,
+                "q": 51.3,
+                "v": 5.58
+            },
+            {
+                "width": 0.8,
+                "q": 55.0,
+                "v": 5.98
+            },
+            {
+                "width": 0.9,
+                "q": 58.8,
+                "v": 6.39
+            },
+            {
+                "width": 1.0,
+                "q": 62.5,
+                "v": 6.79
+            },
+            {
+                "width": 1.1,
+                "q": 66.3,
+                "v": 7.21
+            },
+            {
+                "width": 1.2,
+                "q": 70.0,
+                "v": 7.61
+            },
+            {
+                "width": 1.3,
+                "q": 73.8,
+                "v": 8.02
+            },
+            {
+                "width": 1.4,
+                "q": 77.5,
+                "v": 8.42
+            },
+            {
+                "width": 1.5,
+                "q": 81.3,
+                "v": 8.84
+            },
+            {
+                "width": 1.6,
+                "q": 85.0,
+                "v": 9.24
+            }
+        ]
+    }
+}
