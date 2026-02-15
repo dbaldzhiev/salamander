@@ -12,80 +12,71 @@
     nodes: [],
     connections: [],
     nodeTypes: [
-      { id: 'undefined', name: 'Undefined', color: '#6e7681' }, // Changed from default
-      { id: 'start', name: 'Start', color: '#3fb950' },
-      { id: 'start2', name: 'Secondary Start', color: '#39d2c0' },
-      { id: 'waypoint', name: 'Waypoint', color: '#d29922' },
-      { id: 'exit', name: 'Exit', color: '#f85149' },
+      { id: 'start', name: 'Start', color: '#3fb950' },   // Green
+      { id: 'start2', name: 'Secondary Start', color: '#2da44e' },
+      { id: 'exit', name: 'Exit', color: '#f85149' },    // Red
+      { id: 'normal', name: 'Normal', color: '#8b949e' }, // Grey
+      { id: 'waypoint', name: 'Waypoint', color: '#58a6ff' }, // Blue (Split)
     ],
     connTypes: [
-      { id: 'normal', name: 'Normal', color: '#58a6ff', dash: [] },
-      { id: 'stairs_up', name: 'Stairs Up', color: '#bc8cff', dash: [8, 4] },
-      { id: 'stairs_down', name: 'Stairs Down', color: '#d29922', dash: [8, 4] },
+      { id: 'normal', name: 'Normal', color: '#8b949e', dash: [] },
+      { id: 'stairs_up', name: 'Stairs (Up)', color: '#d29922', dash: [5, 5] },
+      { id: 'stairs_down', name: 'Stairs (Down)', color: '#a371f7', dash: [5, 5] },
+      { id: 'door', name: 'Door', color: '#3fb950', dash: [] }, // Green door
+      { id: 'door_emergency', name: 'Emergency Door', color: '#f85149', dash: [] },
     ],
     nextNodeId: 1,
     nextConnId: 1,
-    regulations: null, // Loaded from regulations.json
-    calculationMethod: 'A',
+    regulations: null, // Loaded regulation data
+    calculationMethod: 'B', // Default to Method B
     totalEvacuationTime: 0,
   };
 
-  let tool = 'select';  // select | addNode | connect | delete
-  let selected = null;    // { type:'node'|'connection', id }
+  // Editor State
+  let tool = 'select'; // select, addNode, connect, delete
+  let selectedItems = new Set(); // Set of strings "{type}:{id}"
   let connectSource = null;
-  let dragging = null;    // { nodeId, offsetX, offsetY }
-
-  // Camera / transform
-  let cam = { x: 0, y: 0, zoom: 1 };
   let isPanning = false;
+  let isDraggingNode = false;
+  let dragging = null;
+  let dragStart = { x: 0, y: 0 };
+  let lastMouse = { x: 0, y: 0 };
   let panStart = { x: 0, y: 0 };
+  let cam = { x: 0, y: 0, zoom: 1 };
+  const ZOOM_MIN = 0.1, ZOOM_MAX = 5;
 
-  // Hint auto-hide
-  let hintHidden = false;
-  function hideHint() {
-    if (!hintHidden) {
-      hint.style.opacity = '0';
-      hintHidden = true;
-      setTimeout(() => hint.style.display = 'none', 400);
-    }
-  }
+  // Constants
+  const GRID_SIZE = 20; // cm (visual grid)
+  const PIXELS_PER_METER = 20; // 1m = 20px
 
-  const NODE_RADIUS = 50;
-  const HIT_MARGIN = 8;
-  const GRID_SIZE = 100;
-  const PIXELS_PER_METER = 100; // 1m = 100 units (cm)
+  const NODE_RADIUS = 15;
+  const HIT_MARGIN = 5;
 
   function snapToGrid(v) {
     return Math.round(v / GRID_SIZE) * GRID_SIZE;
   }
 
-  // ─── DOM refs ─────────────────────────────────────────────
+  // DOM Elements
+  const container = document.getElementById('canvas-container');
   const canvas = document.getElementById('graphCanvas');
   const ctx = canvas.getContext('2d');
-  const container = document.getElementById('canvas-container');
-  const hint = document.getElementById('canvas-hint');
+  const canvasHint = document.getElementById('canvas-hint');
 
-  // Sidebar panels
+  // Properties Panel Elements
+  const propsHeader = document.getElementById('properties-header');
+  const propsContent = document.getElementById('properties-content');
   const sidebarEmpty = document.getElementById('sidebar-empty');
-  const sidebarNode = document.getElementById('sidebar-node');
-  const sidebarConn = document.getElementById('sidebar-connection');
+  const legendContent = document.getElementById('legend-content');
 
-  // Node property inputs
-  const inpNodeName = document.getElementById('nodeName');
-  const inpNodeType = document.getElementById('nodeType');
-  const inpNodeX = document.getElementById('nodeX');
-  const inpNodeY = document.getElementById('nodeY');
-  const nodeCustomPropsDiv = document.getElementById('nodeCustomProps');
-
-  // Connection property inputs
-  const inpConnType = document.getElementById('connType');
-  const inpConnDir = document.getElementById('connDirection');
-  const inpConnDist = document.getElementById('connDistance');
-  const inpConnWidth = document.getElementById('connWidth');
-  const inpConnSpeed = document.getElementById('connSpeed');
-  const inpConnWeight = document.getElementById('connWeight');
-  const inpConnCongestion = document.getElementById('connCongestion');
-  const connCustomPropsDiv = document.getElementById('connCustomProps');
+  // Bottom Panel
+  const bottomPanel = document.getElementById('bottom-panel');
+  const panelTabs = document.querySelectorAll('.panel-tab');
+  const panelNodes = document.getElementById('panel-nodes');
+  const panelConnections = document.getElementById('panel-connections');
+  const panelRegulations = document.getElementById('panel-regulations');
+  const nodesTableBody = document.querySelector('#panel-nodes tbody');
+  const connectionsTableBody = document.querySelector('#panel-connections tbody');
+  const regulationsContent = document.getElementById('regulations-content');
 
   // Calculation UI
   const methodRadios = document.querySelectorAll('input[name="calcMethod"]');
@@ -102,82 +93,9 @@
 
   // ... (Keep splitConnection, createConnection updates below)
 
-  function updateSidebar() {
-    sidebarEmpty.style.display = 'none';
-    sidebarNode.style.display = 'none';
-    sidebarConn.style.display = 'none';
 
-    if (!selected) {
-      sidebarEmpty.style.display = 'flex';
-      return;
-    }
 
-    if (selected.type === 'node') {
-      // ... (existing node logic)
-      const node = state.nodes.find(n => n.id === selected.id);
-      if (!node) { sidebarEmpty.style.display = 'flex'; return; }
-      sidebarNode.style.display = 'block';
-      inpNodeName.value = node.name;
-      populateTypeSelect(inpNodeType, state.nodeTypes, node.typeId);
-      inpNodeX.value = node.x;
-      inpNodeY.value = node.y;
-      const isSource = ['start', 'start2'].includes(node.typeId);
-      inpNodePeople.value = node.people || '';
-      inpNodePeople.readOnly = !isSource;
-      if (isSource) {
-        peopleHint.textContent = 'Enter number of people at this origin';
-      } else {
-        peopleHint.textContent = 'Auto-calculated from incoming connections';
-      }
-      renderCustomProps(nodeCustomPropsDiv, node.props, 'node');
-    }
 
-    if (selected.type === 'connection') {
-      const conn = state.connections.find(c => c.id === selected.id);
-      if (!conn) { sidebarEmpty.style.display = 'flex'; return; }
-      sidebarConn.style.display = 'block';
-      populateTypeSelect(inpConnType, state.connTypes, conn.typeId);
-      inpConnDir.value = conn.direction || 'forward';
-      inpConnDist.value = conn.distance;
-      inpConnWidth.value = conn.width || 1.2; // New input
-      inpConnSpeed.value = conn.speed || '';
-      inpConnWeight.value = conn.weight || '';
-      inpConnCongestion.value = conn.congestion || 'none';
-      renderCustomProps(connCustomPropsDiv, conn.props, 'connection');
-    }
-  }
-
-  // Node people count
-  const inpNodePeople = document.getElementById('nodePeople');
-  const peopleHint = document.getElementById('peopleHint');
-  const peopleGroup = document.getElementById('peopleGroup');
-
-  // Bottom Panel Refs
-  const nodesTableBody = document.getElementById('nodesTableBody');
-  const connectionsTableBody = document.getElementById('connectionsTableBody');
-  const panelNodes = document.getElementById('panel-nodes');
-  const panelConnections = document.getElementById('panel-connections');
-  const panelTabs = document.querySelectorAll('.panel-tab');
-
-  // Congestion color map
-  const CONGESTION_COLORS = {
-    none: null,
-    low: null,
-    medium: null,
-    high: null,
-    blocked: '#f85149', // Red for blocked/bottleneck
-  };
-  const CONGESTION_WIDTH = {
-    none: 2,
-    low: 3,
-    medium: 4,
-    high: 5,
-    blocked: 6,
-  };
-
-  // Type lists
-  const nodeTypesList = document.getElementById('nodeTypesList');
-  const connTypesList = document.getElementById('connTypesList');
 
   // ─── Helpers ──────────────────────────────────────────────
   const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
@@ -769,7 +687,7 @@
     const nt = state.nodeTypes.find(t => t.id === node.typeId) || state.nodeTypes[0];
     const s = worldToScreen(node.x, node.y);
     const r = NODE_RADIUS * cam.zoom;
-    const isSelected = selected && selected.type === 'node' && selected.id === node.id;
+    const isSelected = selectedItems.has(`node:${node.id}`);
     const isConnectSource = connectSource === node.id;
 
     // Glow
@@ -839,7 +757,7 @@
     if (!src || !tgt) return;
 
     const ct = state.connTypes.find(t => t.id === conn.typeId) || state.connTypes[0];
-    const isSelected = selected && selected.type === 'connection' && selected.id === conn.id;
+    const isSelected = selectedItems.has(`connection:${conn.id}`);
     const dir = conn.direction || 'forward';
     const congestion = conn.congestion || 'none';
 
@@ -1199,25 +1117,28 @@
   function deleteNode(nodeId) {
     state.nodes = state.nodes.filter(n => n.id !== nodeId);
     state.connections = state.connections.filter(c => c.sourceId !== nodeId && c.targetId !== nodeId);
-    if (selected && selected.type === 'node' && selected.id === nodeId) clearSelection();
+    if (selectedItems.has(`node:${nodeId}`)) clearSelection();
     recalcPeopleCounts();
     render();
   }
 
   function deleteConnection(connId) {
     state.connections = state.connections.filter(c => c.id !== connId);
-    if (selected && selected.type === 'connection' && selected.id === connId) clearSelection();
+    if (selectedItems.has(`connection:${connId}`)) clearSelection();
     recalcPeopleCounts();
     render();
   }
 
   function updateConnectionDistances() {
-    for (const c of state.connections) {
-      if (c.distanceManual) continue;
+    state.connections.forEach(c => {
+      if (c.distanceManual) return; // Skip if manually set
       const src = state.nodes.find(n => n.id === c.sourceId);
       const tgt = state.nodes.find(n => n.id === c.targetId);
-      if (src && tgt) c.distance = Math.round((dist(src, tgt) / 100) * 10) / 10;
-    }
+      if (src && tgt) {
+        // Distance in meters
+        c.distance = Math.round((dist(src, tgt) / PIXELS_PER_METER) * 10) / 10;
+      }
+    });
     recalcFireSafety();
   }
 
@@ -1269,104 +1190,10 @@
   }
 
   // ─── Selection ────────────────────────────────────────────
-  function selectItem(item) {
-    selected = item;
-    updateSidebar();
-    render();
+  // ─── Interaction Helpers ─────────────────────────────────
+  function hideHint() {
+    if (canvasHint) canvasHint.style.display = 'none';
   }
-
-  function clearSelection() {
-    selected = null;
-    connectSource = null;
-    updateSidebar();
-    render();
-  }
-
-  // ─── Sidebar Updates ─────────────────────────────────────
-  function updateSidebar() {
-    sidebarEmpty.style.display = 'none';
-    sidebarNode.style.display = 'none';
-    sidebarConn.style.display = 'none';
-
-    if (!selected) {
-      sidebarEmpty.style.display = 'flex';
-      return;
-    }
-
-    if (selected.type === 'node') {
-      const node = state.nodes.find(n => n.id === selected.id);
-      if (!node) { sidebarEmpty.style.display = 'flex'; return; }
-      sidebarNode.style.display = 'block';
-      inpNodeName.value = node.name;
-      populateTypeSelect(inpNodeType, state.nodeTypes, node.typeId);
-      inpNodeX.value = node.x;
-      inpNodeY.value = node.y;
-      // People count: editable for Start/Secondary Start, readonly for others
-      const isSource = ['start', 'start2'].includes(node.typeId);
-      inpNodePeople.value = node.people || '';
-      inpNodePeople.readOnly = !isSource;
-      if (isSource) {
-        peopleHint.textContent = 'Enter number of people at this origin';
-      } else {
-        peopleHint.textContent = 'Auto-calculated from incoming connections';
-      }
-      renderCustomProps(nodeCustomPropsDiv, node.props, 'node');
-    }
-
-    if (selected.type === 'connection') {
-      const conn = state.connections.find(c => c.id === selected.id);
-      if (!conn) { sidebarEmpty.style.display = 'flex'; return; }
-      sidebarConn.style.display = 'block';
-      populateTypeSelect(inpConnType, state.connTypes, conn.typeId);
-      inpConnDir.value = conn.direction || 'forward';
-      inpConnDist.value = conn.distance;
-      inpConnSpeed.value = conn.speed || '';
-      inpConnWeight.value = conn.weight || '';
-      inpConnCongestion.value = conn.congestion || 'none';
-      renderCustomProps(connCustomPropsDiv, conn.props, 'connection');
-    }
-  }
-
-  function populateTypeSelect(select, types, currentId) {
-    select.innerHTML = '';
-    for (const t of types) {
-      const opt = document.createElement('option');
-      opt.value = t.id;
-      opt.textContent = t.name;
-      if (t.id === currentId) opt.selected = true;
-      select.appendChild(opt);
-    }
-  }
-
-  function renderCustomProps(container, props, itemType) {
-    container.innerHTML = '';
-    for (const [key, val] of Object.entries(props)) {
-      const row = document.createElement('div');
-      row.className = 'custom-prop-row';
-      row.innerHTML = `
-        <input type="text" value="${escHtml(key)}" placeholder="Key" class="prop-key">
-        <input type="text" value="${escHtml(String(val))}" placeholder="Value" class="prop-val">
-        <button class="btn-remove-prop" title="Remove">×</button>
-      `;
-      row.querySelector('.prop-key').addEventListener('change', (e) => {
-        const newKey = e.target.value.trim();
-        if (newKey && newKey !== key) {
-          props[newKey] = props[key];
-          delete props[key];
-          renderCustomProps(container, props, itemType);
-        }
-      });
-      row.querySelector('.prop-val').addEventListener('change', (e) => {
-        props[key] = e.target.value;
-      });
-      row.querySelector('.btn-remove-prop').addEventListener('click', () => {
-        delete props[key];
-        renderCustomProps(container, props, itemType);
-      });
-      container.appendChild(row);
-    }
-  }
-
   function escHtml(s) {
     if (s == null) return '';
     const str = String(s);
@@ -1378,7 +1205,7 @@
     // 1. Nodes Table
     let nHtml = '';
     for (const n of state.nodes) {
-      const isSel = selected && selected.type === 'node' && selected.id === n.id;
+      const isSel = selectedItems.has(`node:${n.id}`);
       const type = state.nodeTypes.find(t => t.id === n.typeId);
       const typeName = type ? type.name : n.typeId;
       nHtml += `<tr class="${isSel ? 'selected' : ''}" onclick="window.selectNode(${n.id})">
@@ -1396,7 +1223,7 @@
     // 2. Connections Table
     let cHtml = '';
     for (const c of state.connections) {
-      const isSel = selected && selected.type === 'connection' && selected.id === c.id;
+      const isSel = selectedItems.has(`connection:${c.id}`);
       const cType = state.connTypes.find(t => t.id === c.typeId);
       const cTypeName = cType ? cType.name : c.typeId;
 
@@ -1438,7 +1265,7 @@
   // ─── Regulations Data ─────────────────────────────────────
   let regulationsData = null;
   const regulationsTableBody = document.getElementById('regulationsTableBody');
-  const panelRegulations = document.getElementById('panel-regulations');
+  // panelRegulations already declared above
 
   fetch('regulations.json')
     .then(res => res.json())
@@ -1528,192 +1355,7 @@
     document.body.removeChild(link);
   });
 
-  // ─── Sidebar Input Handlers ──────────────────────────────
-  inpNodeName.addEventListener('input', () => {
-    if (!selected || selected.type !== 'node') return;
-    const node = state.nodes.find(n => n.id === selected.id);
-    if (node) { node.name = inpNodeName.value; render(); }
-  });
 
-  inpNodeType.addEventListener('change', () => {
-    if (!selected || selected.type !== 'node') return;
-    const node = state.nodes.find(n => n.id === selected.id);
-    if (node) {
-      node.typeId = inpNodeType.value;
-      recalcPeopleCounts();
-      updateSidebar();
-      render();
-    }
-  });
-
-  inpNodeX.addEventListener('change', () => {
-    if (!selected || selected.type !== 'node') return;
-    const node = state.nodes.find(n => n.id === selected.id);
-    if (node) { node.x = Number(inpNodeX.value); updateConnectionDistances(); updateSidebar(); render(); }
-  });
-
-  inpNodeY.addEventListener('change', () => {
-    if (!selected || selected.type !== 'node') return;
-    const node = state.nodes.find(n => n.id === selected.id);
-    if (node) { node.y = Number(inpNodeY.value); updateConnectionDistances(); updateSidebar(); render(); }
-  });
-
-  inpConnType.addEventListener('change', () => {
-    if (!selected || selected.type !== 'connection') return;
-    const conn = state.connections.find(c => c.id === selected.id);
-    if (conn) { conn.typeId = inpConnType.value; render(); }
-  });
-
-  inpConnDist.addEventListener('change', () => {
-    if (!selected || selected.type !== 'connection') return;
-    const conn = state.connections.find(c => c.id === selected.id);
-    if (conn) {
-      conn.distance = Number(inpConnDist.value) || 0;
-      conn.distanceManual = true;
-      recalcFireSafety();
-    }
-  });
-
-  inpConnSpeed.addEventListener('change', () => {
-    if (!selected || selected.type !== 'connection') return;
-    const conn = state.connections.find(c => c.id === selected.id);
-    if (conn) conn.speed = Number(inpConnSpeed.value) || 0;
-  });
-
-  inpConnWeight.addEventListener('change', () => {
-    if (!selected || selected.type !== 'connection') return;
-    const conn = state.connections.find(c => c.id === selected.id);
-    if (conn) conn.weight = Number(inpConnWeight.value) || 1;
-  });
-
-  // Width handler
-  inpConnWidth.addEventListener('change', () => {
-    if (!selected || selected.type !== 'connection') return;
-    const conn = state.connections.find(c => c.id === selected.id);
-    if (conn) {
-      conn.width = Number(inpConnWidth.value) || 1.2;
-      recalcFireSafety();
-      render();
-    }
-  });
-
-  // People count handler
-  inpNodePeople.addEventListener('change', () => {
-    if (!selected || selected.type !== 'node') return;
-    const node = state.nodes.find(n => n.id === selected.id);
-    if (node && SOURCE_TYPES.includes(node.typeId)) {
-      node.people = Math.max(0, parseInt(inpNodePeople.value) || 0);
-      recalcPeopleCounts();
-      render();
-    }
-  });
-
-  // Direction handler
-  inpConnDir.addEventListener('change', () => {
-    if (!selected || selected.type !== 'connection') return;
-    const conn = state.connections.find(c => c.id === selected.id);
-    if (conn) {
-      conn.direction = inpConnDir.value;
-      recalcPeopleCounts();
-      render();
-    }
-  });
-
-  // Congestion handler
-  inpConnCongestion.addEventListener('change', () => {
-    if (!selected || selected.type !== 'connection') return;
-    const conn = state.connections.find(c => c.id === selected.id);
-    if (conn) { conn.congestion = inpConnCongestion.value; render(); }
-  });
-
-  // Add custom prop buttons
-  document.getElementById('btnAddNodeProp').addEventListener('click', () => {
-    if (!selected || selected.type !== 'node') return;
-    const node = state.nodes.find(n => n.id === selected.id);
-    if (!node) return;
-    const key = `prop_${Object.keys(node.props).length + 1}`;
-    node.props[key] = '';
-    renderCustomProps(nodeCustomPropsDiv, node.props, 'node');
-  });
-
-  document.getElementById('btnAddConnProp').addEventListener('click', () => {
-    if (!selected || selected.type !== 'connection') return;
-    const conn = state.connections.find(c => c.id === selected.id);
-    if (!conn) return;
-    const key = `prop_${Object.keys(conn.props).length + 1}`;
-    conn.props[key] = '';
-    renderCustomProps(connCustomPropsDiv, conn.props, 'connection');
-  });
-
-  // ─── Type Manager ────────────────────────────────────────
-  function renderTypeManager() {
-    renderTypeList(nodeTypesList, state.nodeTypes, 'node');
-    renderTypeList(connTypesList, state.connTypes, 'connection');
-  }
-
-  function renderTypeList(container, types, kind) {
-    container.innerHTML = '';
-    for (const t of types) {
-      const item = document.createElement('div');
-      item.className = 'type-item';
-      item.innerHTML = `
-        <div class="type-color" style="background:${t.color}" title="Click to change color"></div>
-        <input type="color" class="type-color-input" value="${colorToHex(t.color)}">
-        <input type="text" class="type-name" value="${escHtml(t.name)}">
-        <button class="type-delete" title="Remove type">×</button>
-      `;
-
-      const colorSwatch = item.querySelector('.type-color');
-      const colorInput = item.querySelector('.type-color-input');
-      const nameInput = item.querySelector('.type-name');
-      const deleteBtn = item.querySelector('.type-delete');
-
-      colorSwatch.addEventListener('click', () => colorInput.click());
-      colorInput.addEventListener('input', () => {
-        t.color = colorInput.value;
-        colorSwatch.style.background = t.color;
-        render();
-      });
-      nameInput.addEventListener('change', () => {
-        t.name = nameInput.value.trim() || t.name;
-        render();
-        updateSidebar();
-      });
-      deleteBtn.addEventListener('click', () => {
-        if (types.length <= 1) return; // keep at least one
-        const idx = types.indexOf(t);
-        if (idx !== -1) types.splice(idx, 1);
-        renderTypeManager();
-        render();
-        updateSidebar();
-      });
-
-      container.appendChild(item);
-    }
-  }
-
-  document.getElementById('btnAddNodeType').addEventListener('click', () => {
-    const hue = Math.floor(Math.random() * 360);
-    state.nodeTypes.push({
-      id: 'nt_' + uid(),
-      name: 'New Type',
-      color: `hsl(${hue}, 70%, 60%)`,
-    });
-    renderTypeManager();
-    updateSidebar();
-  });
-
-  document.getElementById('btnAddConnType').addEventListener('click', () => {
-    const hue = Math.floor(Math.random() * 360);
-    state.connTypes.push({
-      id: 'ct_' + uid(),
-      name: 'New Type',
-      color: `hsl(${hue}, 70%, 60%)`,
-      dash: [],
-    });
-    renderTypeManager();
-    updateSidebar();
-  });
 
   // ─── Mouse Interactions ──────────────────────────────────
   let tempMouseWorld = null;
@@ -1766,16 +1408,21 @@
 
     if (e.button !== 0) return;
 
-    // Check width handle click first (if connection selected)
-    if (selected && selected.type === 'connection') {
-      const conn = state.connections.find(c => c.id === selected.id);
-      if (conn) {
-        const hPos = getConnectionHandlePos(conn);
-        if (hPos) {
-          const d = Math.sqrt((sx - hPos.x) ** 2 + (sy - hPos.y) ** 2);
-          if (d <= 8) { // 5 radius + margin
-            dragging = { type: 'width', connId: conn.id };
-            return;
+    // Check width handle click first (if any connection selected)
+    // We only support width dragging for single selection for simplicity, or we check all.
+    // Let's check all selected connections.
+    for (const key of selectedItems) {
+      if (key.startsWith('connection:')) {
+        const id = parseInt(key.split(':')[1]);
+        const conn = state.connections.find(c => c.id === id);
+        if (conn) {
+          const hPos = getConnectionHandlePos(conn);
+          if (hPos) {
+            const d = Math.sqrt((sx - hPos.x) ** 2 + (sy - hPos.y) ** 2);
+            if (d <= 8) {
+              dragging = { type: 'width', connId: conn.id };
+              return;
+            }
           }
         }
       }
@@ -1784,8 +1431,10 @@
     switch (tool) {
       case 'select': {
         const hitNode = hitTestNode(w.x, w.y);
+        const multi = e.shiftKey || e.ctrlKey || e.metaKey;
+
         if (hitNode) {
-          selectItem({ type: 'node', id: hitNode.id });
+          selectItem({ type: 'node', id: hitNode.id }, multi);
           dragging = {
             type: 'node',
             nodeId: hitNode.id,
@@ -1796,9 +1445,9 @@
         } else {
           const hitConn = hitTestConnection(w.x, w.y);
           if (hitConn) {
-            selectItem({ type: 'connection', id: hitConn.id });
+            selectItem({ type: 'connection', id: hitConn.id }, multi);
           } else {
-            clearSelection();
+            if (!multi) clearSelection();
           }
         }
         break;
@@ -1883,9 +1532,10 @@
           node.x = snapToGrid(tempMouseWorld.x - dragging.offsetX);
           node.y = snapToGrid(tempMouseWorld.y - dragging.offsetY);
           updateConnectionDistances();
-          if (selected && selected.type === 'node' && selected.id === node.id) {
-            inpNodeX.value = node.x;
-            inpNodeY.value = node.y;
+          updateConnectionDistances();
+          // Update properties panel to reflect new coordinates
+          if (selectedItems.has(`node:${node.id}`)) {
+            updatePropertiesPanel();
           }
           render();
         }
@@ -1940,7 +1590,7 @@
             conn.width = Math.round(widthMeters * 10) / 10;
             if (conn.width < 0.1) conn.width = 0.1;
 
-            inpConnWidth.value = conn.width;
+            updatePropertiesPanel();
             render();
           }
         }
@@ -1963,7 +1613,7 @@
       dragging = null;
       container.classList.remove('dragging-node');
       updateConnectionDistances();
-      updateSidebar();
+      updatePropertiesPanel();
     }
   });
 
@@ -2088,7 +1738,9 @@
           state.nextNodeId = Math.max(0, ...state.nodes.map(n => n.id)) + 1;
           state.nextConnId = Math.max(0, ...state.connections.map(c => c.id)) + 1;
           clearSelection();
-          renderTypeManager();
+          clearSelection();
+          renderLegend();
+          render();
           render();
         } catch (err) {
           alert('Failed to import: ' + err.message);
@@ -2121,8 +1773,24 @@
 
     container.setAttribute('data-tool', tool);
     resizeCanvas();
-    renderTypeManager();
+    renderLegend();
     render();
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.target.matches('input, select, textarea')) return;
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        deleteSelection();
+      }
+      if (e.key === 'Escape') {
+        clearSelection();
+        tool = 'select';
+        container.setAttribute('data-tool', tool);
+        connectSource = null;
+        render();
+      }
+    });
   }
 
   // Wait for fonts
@@ -2341,56 +2009,66 @@
 
       text += `SEGMENT [${src.name || src.id}] -> [${tgt.name || tgt.id}]:\n`;
       text += `  1. Geometry:\n`;
-      text += `     - Length (L) = ${c.distance.toFixed(2)} m\n`;
-      text += `     - Width (W)  = ${(c.width || 1.2).toFixed(2)} m\n`;
+      text += `     - Length (ℓ) = ${c.distance.toFixed(2)} m\n`;
+      text += `     - Width (δ)  = ${(c.width || 1.2).toFixed(2)} m\n`;
+
+      const width = c.width || 1.2;
 
       if (state.calculationMethod === 'B') {
         const fs = c.flowState || { Q_in: 0, q_spec: 0, hasQueue: false };
 
-        text += `  2. Flow Propagation:\n`;
-        // Check if initial segment (no incoming flow strictu sensu, but generated flow)
-        // We can infer it's initial if Q_in matches Q based on Density calculation logic, 
-        // or checks incoming conns. But we don't have easy access to graph topology here without search.
-        // Let's just call it "Segment Flow (Q)" generally, or "Incoming Flow (Q_in)" for downstream.
-        // Actually, we can check if it's a start node.
+        text += `  2. Flow Analysis (Specific Throughput Capacity):\n`;
+
+        // Define flow sources more formally
         const isStart = src.typeId === 'start' || src.typeId === 'start2';
-
         if (isStart) {
-          text += `     - Generated Flow (Q) = ${(fs.Q_in || 0).toFixed(2)} p/min (from Density)\n`;
+          text += `     - Initial Segment: Flow derived from Population Density (D = N/A)\n`;
+          text += `     - Generated Flow (Q) = ${(fs.Q_in || 0).toFixed(2)} p/min\n`;
         } else {
-          text += `     - Incoming Flow (Q_in) = ${(fs.Q_in || 0).toFixed(2)} p/min\n`;
+          text += `     - Incoming Flow from Upstream (Q_in = Σ Q_prev) = ${(fs.Q_in || 0).toFixed(2)} p/min\n`;
         }
 
-        text += `     - Specific Flow (q) = Q / W = ${(fs.q_spec || 0).toFixed(2)} p/m/min\n`;
+        text += `     - Specific Throughput Capacity (q = Q / δ) = ${(fs.q_spec || 0).toFixed(2)} p/m/min\n`;
 
-        text += `  3. Bottleneck Check:\n`;
-        text += `     - Max Permissible (q_max) = ${stats.q_max} p/m/min\n`;
+        text += `  3. Bottleneck Verification (Queue Formulation):\n`;
+        text += `     - Max Permissible Specific Throughput (q_max) = ${stats.q_max} p/m/min (from Table 11)\n`;
+
         if (fs.hasQueue) {
-          text += `     - STATUS: QUEUE FORMS (q > q_max)\n`;
-          text += `     - Using Boundary Throughput (q_gran) = ${stats.q_gran}\n`;
+          text += `     - VERIFICATION: q > q_max (${(fs.q_spec || 0).toFixed(2)} > ${stats.q_max})\n`;
+          text += `     - STATUS: CONGESTION DETECTED. Queue formation is inevitable.\n`;
+          text += `     - CONSEQUENCE: Movement is restricted to Boundary Parameters:\n`;
+          text += `       * Boundary Specific Throughput (q_gran) = ${stats.q_gran} p/m/min\n`;
+          text += `       * Boundary Speed (v_gran) = ${stats.v_gran || 10} m/min\n`;
         } else {
-          text += `     - STATUS: NO QUEUE (q <= q_max)\n`;
+          text += `     - VERIFICATION: q ≤ q_max (${(fs.q_spec || 0).toFixed(2)} ≤ ${stats.q_max})\n`;
+          text += `     - STATUS: NORMAL FLOW. No significant queue formation.\n`;
         }
 
-        text += `  4. Time Calculation:\n`;
+        text += `  4. Evacuation Time Calculation (τ):\n`;
         if (fs.hasQueue) {
           // Formula 2 (Norm 2)
           const N = getSegmentParams(c).people || 0;
-          const Q_out = (c.width || 1.2) * stats.q_gran;
+          const Q_out = width * stats.q_gran;
           const Q_in = fs.Q_in || 0;
 
-          text += `     - Method: Formula 2 (Norm 2 Queue)\n`;
-          text += `     - Parameters: v_gran=${stats.v_gran || 14} m/min, q_gran=${stats.q_gran}\n`;
-          text += `     - Q_out = W * q_gran = ${(c.width || 1.2).toFixed(2)} * ${stats.q_gran} = ${Q_out.toFixed(2)}\n`;
-          text += `     - Q_in = ${Q_in.toFixed(2)}\n`;
-          text += `     - Travel Term = ${c.typeId.includes('door') && c.distance <= 0.7 ? '0 (Thin Door)' : `L / v_gran = ${c.distance.toFixed(2)} / ${stats.v_gran || 14}`}\n`;
-          text += `     - Delay Term = N * (1/Q_out - 1/Q_in)\n`;
-          text += `     - Time = Travel + Delay = ${stats.time.toFixed(4)} min\n`;
+          text += `     - Methodology: "Time for Queued Flow" (Norm 2, Formula 2)\n`;
+          text += `     - Formula: τ = ℓ / v_gran + N * (1/Q_out - 1/Q_in)\n`;
+          text += `       where Q_out = δ * q_gran = ${(Q_out).toFixed(2)} p/min\n`;
+          text += `     - Term 1: Travel Time (ℓ / v_gran)\n`;
+          text += `       = ${c.typeId.includes('door') && c.distance <= 0.7 ? '0 (Thin Door Assumption)' : `${c.distance.toFixed(2)} / ${stats.v_gran || 10} = ${(c.distance / (stats.v_gran || 10)).toFixed(4)}`} min\n`;
+
+          const val = (1 / Q_out) - (1 / Q_in);
+          const delay = N * Math.max(0, val);
+
+          text += `     - Term 2: Queue Delay (N * [1/Q_out - 1/Q_in])\n`;
+          text += `       = ${N} * [1/${Q_out.toFixed(2)} - 1/${Q_in.toFixed(2)}] = ${delay.toFixed(4)} min\n`;
+          text += `     - Total Time (τ) = ${(stats.time).toFixed(4)} min\n`;
         } else {
           // Formula 1
-          text += `     - Method: Formula 1 (Travel Speed)\n`;
-          text += `     - Speed (v) = ${stats.v.toFixed(2)} m/min\n`;
-          text += `     - Time = L / v = ${c.distance.toFixed(2)} / ${stats.v.toFixed(2)} = ${stats.time.toFixed(4)} min\n`;
+          text += `     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)\n`;
+          text += `     - Formula: τ = ℓ / v\n`;
+          text += `     - Speed (v) derived from Density Table 11 = ${stats.v.toFixed(2)} m/min\n`;
+          text += `     - Time (τ) = ${c.distance.toFixed(2)} / ${stats.v.toFixed(2)} = ${stats.time.toFixed(4)} min\n`;
         }
 
       } else {
@@ -2398,10 +2076,10 @@
         const area = c.distance * (c.width || 1.2);
         const srcPeople = src.people || 0;
         text += `  2. Flow Parameters:\n`;
-        text += `     - Density (D)= P / A = ${srcPeople} / ${area.toFixed(2)} = ${stats.density.toFixed(2)} p/m²\n`;
+        text += `     - Density (D) = N / Area = ${srcPeople} / ${area.toFixed(2)} = ${stats.density.toFixed(2)} p/m²\n`;
         text += `     - Based on D, Speed (v) = ${stats.v.toFixed(2)} m/min\n`;
-        text += `  3. Travel Time (t):\n`;
-        text += `     - t = L / v = ${c.distance.toFixed(2)} / ${stats.v.toFixed(2)} = ${stats.time.toFixed(4)} min\n`;
+        text += `  3. Travel Time (τ):\n`;
+        text += `     - τ = ℓ / v = ${c.distance.toFixed(2)} / ${stats.v.toFixed(2)} = ${stats.time.toFixed(4)} min\n`;
       }
 
       text += `  ---------------------------------------------------\n\n`;
@@ -2425,4 +2103,304 @@
     mathProofContent.textContent = text;
   }
 
+  // ─── Selection Logic ─────────────────────────────────────
+  function selectItem(item, multi = false) {
+    if (!item) return;
+    const key = `${item.type}:${item.id}`;
+
+    if (!multi) {
+      selectedItems.clear();
+      selectedItems.add(key);
+    } else {
+      if (selectedItems.has(key)) {
+        selectedItems.delete(key);
+      } else {
+        selectedItems.add(key);
+      }
+    }
+    updatePropertiesPanel();
+    render();
+  }
+
+  function clearSelection() {
+    selectedItems.clear();
+    updatePropertiesPanel();
+    render();
+  }
+
+  function deleteSelection() {
+    if (selectedItems.size === 0) return;
+
+    // Convert to array to avoid modification during iteration issues
+    const keys = Array.from(selectedItems);
+    keys.forEach(key => {
+      const [type, idStr] = key.split(':');
+      const id = parseInt(idStr);
+      if (type === 'node') deleteNode(id);
+      else if (type === 'connection') deleteConnection(id);
+    });
+
+    clearSelection();
+  }
+
+  // ─── Properties Panel Logic ──────────────────────────────
+  function updatePropertiesPanel() {
+    // Clear content
+    propsContent.innerHTML = '';
+
+    if (selectedItems.size === 0) {
+      propsContent.appendChild(sidebarEmpty);
+      sidebarEmpty.style.display = 'flex';
+      return;
+    }
+    sidebarEmpty.style.display = 'none';
+
+    // Group selection by type
+    const selNodes = [];
+    const selConns = [];
+
+    selectedItems.forEach(key => {
+      const [type, idStr] = key.split(':');
+      const id = parseInt(idStr);
+      if (type === 'node') {
+        const n = state.nodes.find(x => x.id === id);
+        if (n) selNodes.push(n);
+      } else {
+        const c = state.connections.find(x => x.id === id);
+        if (c) selConns.push(c);
+      }
+    });
+
+    const totalSelected = selNodes.length + selConns.length;
+    if (totalSelected === 0) return;
+
+    // Header updates
+    propsHeader.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        <line x1="3" y1="9" x2="21" y2="9" />
+        <line x1="9" y1="21" x2="9" y2="9" />
+      </svg>
+      Editing ${totalSelected} Item${totalSelected > 1 ? 's' : ''}
+    `;
+
+    // 1. Common Properties (Node)
+    if (selNodes.length > 0) {
+      const section = document.createElement('div');
+      section.className = 'prop-section';
+      section.innerHTML = `<h4>Node Properties (${selNodes.length})</h4>`;
+
+      // Name (Single only)
+      if (selNodes.length === 1) {
+        section.appendChild(createPropInput('Name', 'text', selNodes[0].name, (val) => {
+          selNodes[0].name = val;
+          render();
+        }));
+
+        // Coordinates (Read-only)
+        section.appendChild(createPropInput('X', 'number', selNodes[0].x, () => { }, true));
+        section.appendChild(createPropInput('Y', 'number', selNodes[0].y, () => { }, true));
+      }
+
+      // Type
+      const commonTypeId = getCommonValue(selNodes, n => n.typeId);
+      section.appendChild(createPropSelect('Type', state.nodeTypes, commonTypeId, (val) => {
+        selNodes.forEach(n => n.typeId = val);
+        recalcPeopleCounts();
+        render();
+      }));
+
+      // People (Source nodes only)
+      const sourceNodes = selNodes.filter(n => ['start', 'start2'].includes(n.typeId));
+      if (sourceNodes.length > 0) {
+        const commonPeople = getCommonValue(sourceNodes, n => n.people || 0);
+        section.appendChild(createPropInput('People (Start)', 'number', commonPeople, (val) => {
+          sourceNodes.forEach(n => n.people = parseInt(val) || 0);
+          recalcPeopleCounts();
+          render();
+        }, sourceNodes.length !== selNodes.length)); // Disable if mixed source/non-source? No, just apply to sources.
+      }
+
+      propsContent.appendChild(section);
+    }
+
+    // 2. Common Properties (Connection)
+    if (selConns.length > 0) {
+      const section = document.createElement('div');
+      section.className = 'prop-section';
+      section.innerHTML = `<h4>Connection Properties (${selConns.length})</h4>`;
+
+      // Type
+      const commonTypeId = getCommonValue(selConns, c => c.typeId);
+      section.appendChild(createPropSelect('Type', state.connTypes, commonTypeId, (val) => {
+        selConns.forEach(c => c.typeId = val);
+        render();
+      }));
+
+      // Width
+      const commonWidth = getCommonValue(selConns, c => c.width || 1.2);
+      section.appendChild(createPropInput('Width (m)', 'number', commonWidth, (val) => {
+        selConns.forEach(c => c.width = parseFloat(val) || 1.2);
+        recalcFireSafety();
+        render();
+      }));
+
+      // Distance
+      const commonDist = getCommonValue(selConns, c => c.distance);
+      const anyManual = selConns.some(c => c.distanceManual);
+
+      const distInputContainer = document.createElement('div');
+      distInputContainer.className = 'prop-group';
+
+      const distInput = createPropInput('Distance (m)', 'number', commonDist, (val) => {
+        const v = parseFloat(val);
+        if (!isNaN(v) && v > 0) {
+          selConns.forEach(c => {
+            c.distance = v;
+            c.distanceManual = true;
+          });
+          recalcFireSafety();
+          render();
+          updatePropertiesPanel();
+        }
+      });
+      distInputContainer.appendChild(distInput);
+
+      if (anyManual) {
+        const btnReset = document.createElement('button');
+        btnReset.textContent = 'Reset to Auto';
+        btnReset.className = 'btn-small';
+        btnReset.style.marginTop = '4px';
+        btnReset.style.width = '100%';
+        btnReset.onclick = () => {
+          selConns.forEach(c => {
+            c.distanceManual = false;
+            const src = state.nodes.find(n => n.id === c.sourceId);
+            const tgt = state.nodes.find(n => n.id === c.targetId);
+            if (src && tgt) c.distance = Math.round((dist(src, tgt) / PIXELS_PER_METER) * 10) / 10;
+          });
+          recalcFireSafety();
+          updatePropertiesPanel();
+          render();
+        };
+        distInputContainer.appendChild(btnReset);
+      }
+      section.appendChild(distInputContainer);
+
+      propsContent.appendChild(section);
+    }
+  }
+
+  // Helper to create inputs
+  function createPropInput(label, type, value, onChange, disabled = false) {
+    const div = document.createElement('div');
+    div.className = 'prop-group' + (value === '<various>' ? ' various' : '');
+    const id = `prop-${label.replace(/\s+/g, '-')}-${Math.random().toString(36).substr(2, 5)}`;
+
+    div.innerHTML = `<label for="${id}">${label}</label>`;
+    const input = document.createElement('input');
+    input.type = type === 'number' ? 'number' : 'text';
+    input.id = id;
+    if (type === 'number') input.step = '0.1';
+
+    if (value === '<various>') {
+      input.value = ''; // empty input to show placeholder
+      input.placeholder = '<various>';
+    } else {
+      input.value = value;
+    }
+
+    if (disabled) input.disabled = true;
+
+    input.addEventListener('change', (e) => {
+      const val = e.target.value;
+      if (val !== '') { // Only trigger change if value is not empty (unless clearing?)
+        onChange(val);
+      }
+    });
+    div.appendChild(input);
+    return div;
+  }
+
+  function createPropSelect(label, options, value, onChange) {
+    const div = document.createElement('div');
+    div.className = 'prop-group' + (value === '<various>' ? ' various' : '');
+    const id = `prop-${label.replace(/\s+/g, '-')}-${Math.random().toString(36).substr(2, 5)}`;
+
+    div.innerHTML = `<label for="${id}">${label}</label>`;
+    const select = document.createElement('select');
+    select.id = id;
+
+    // Add options
+    options.forEach(opt => {
+      const el = document.createElement('option');
+      el.value = opt.id;
+      el.textContent = opt.name;
+      select.appendChild(el);
+    });
+
+    if (value === '<various>') {
+      const varOpt = document.createElement('option');
+      varOpt.value = '';
+      varOpt.textContent = '<various>';
+      varOpt.selected = true;
+      select.prepend(varOpt);
+    } else {
+      select.value = value;
+    }
+
+    select.addEventListener('change', (e) => onChange(e.target.value));
+    div.appendChild(select);
+    return div;
+  }
+
+  function getCommonValue(items, getter) {
+    if (items.length === 0) return null;
+    const first = getter(items[0]);
+    for (let i = 1; i < items.length; i++) {
+      if (getter(items[i]) !== first) return '<various>';
+    }
+    return first;
+  }
+
+  // ─── Legend ──────────────────────────────────────────────
+  function renderLegend() {
+    if (!legendContent) return;
+    legendContent.innerHTML = '';
+
+    // Nodes
+    state.nodeTypes.forEach(t => {
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML = `
+        <div class="legend-dot" style="background:${t.color}"></div>
+        <span>${t.name}</span>
+      `;
+      legendContent.appendChild(item);
+    });
+
+    // Connections
+    state.connTypes.forEach(t => {
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      // Dashed line viz
+      const dash = t.dash.length > 0 ? 'dashed' : 'solid';
+      item.innerHTML = `
+        <div class="legend-line" style="background:${t.color}; border-bottom:${dash === 'dashed' ? '1px dashed' : 'none'}"></div>
+        <span>${t.name}</span>
+      `;
+      legendContent.appendChild(item);
+    });
+  }
+
+  // Utils
+  function colorToHex(color) {
+    const ctx = document.createElement('canvas').getContext('2d');
+    ctx.fillStyle = color;
+    return ctx.fillStyle;
+  }
+  // Expose for table clicks
+  window.selectNode = (id) => selectItem({ type: 'node', id });
+  window.selectConnection = (id) => selectItem({ type: 'connection', id });
 })();
+
