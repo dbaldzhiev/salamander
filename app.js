@@ -94,8 +94,8 @@
 
   methodRadios.forEach(r => {
     r.addEventListener('change', (e) => {
-      calcMethod = e.target.value;
-      recalcFireSafety(); // We'll implement this
+      state.calculationMethod = e.target.value;
+      recalcFireSafety();
       render();
     });
   });
@@ -251,7 +251,6 @@
 
   function calcMethodA() {
     // Method A: Sum of travel times (Length / Speed)
-    // 1. Calculate time for each segment
     state.connections.forEach(conn => {
       const p = getSegmentParams(conn);
       if (!p) { conn.travelTime = 0; return; }
@@ -261,23 +260,55 @@
 
       const { v } = lookupTable11(p.type, density);
 
-      // Time in minutes
-      conn.travelTime = v > 0 ? p.length / v : 0;
+      // Time in minutes = Length (m) / Speed (m/min)
+      // If speed is 0, time is infinite? Or blocked.
+      // For static calc, if v=0, usually means blocked.
+      conn.travelTime = v > 0.1 ? p.length / v : 9999;
 
-      // Visualization: Color based on density? 
-      // specific flow q = D * v. Compare to q_max?
-      // For now, keep simple.
-      conn.calcStats = { density, v, time: conn.travelTime };
+      conn.calcStats = { density, v, q: 0, time: conn.travelTime, method: 'A' };
     });
 
-    // 2. Find longest path time (Critical Path)
-    // DAG propagation: node.maxTime = max(incoming.maxTime + conn.time)
+    propagateMaxTime();
+  }
 
+  function calcMethodB() {
+    // Method B: Capacity / Throughput (Number of People / (Specific Throughput * Width))
+    // t = N / Q, where Q = q * w
+    state.connections.forEach(conn => {
+      const p = getSegmentParams(conn);
+      if (!p) { conn.travelTime = 0; return; }
+
+      const area = p.length * p.width;
+      const density = area > 0 ? p.people / area : 0;
+
+      const { q } = lookupTable11(p.type, density);
+
+      // Capacity Q (people / min)
+      const Q = q * p.width;
+
+      // Time in minutes = People / Q
+      // If N=0, time=0. 
+      // If Q=0 but N>0, time is infinite.
+      if (p.people <= 0) {
+        conn.travelTime = 0;
+      } else {
+        conn.travelTime = Q > 0.1 ? p.people / Q : 9999;
+      }
+
+      conn.calcStats = { density, v: 0, q, Q, time: conn.travelTime, method: 'B' };
+    });
+
+    propagateMaxTime();
+  }
+
+  function propagateMaxTime() {
     // Reset maxTime
     state.nodes.forEach(n => n.maxTime = 0);
 
+    // Initial time at Source nodes?
+    // Usually 0 unless start delay.
+
     // Topological sort or multi-pass
-    // Since we handle loops naively in recalcPeople, let's do multi-pass here too
     for (let pass = 0; pass < state.nodes.length + 1; pass++) {
       let changed = false;
       for (const conn of state.connections) {
@@ -285,6 +316,7 @@
         const tgt = state.nodes.find(n => n.id === conn.targetId);
         if (!src || !tgt) continue;
 
+        // Cumulative time
         const newTime = (src.maxTime || 0) + (conn.travelTime || 0);
         if (newTime > (tgt.maxTime || 0)) {
           tgt.maxTime = newTime;
@@ -294,16 +326,14 @@
       if (!changed) break;
     }
 
-    // Total time is the max of all Exit nodes (or all nodes?)
-    // Usually max time to reach an Exit
+    // Total time is the max of all Exit nodes
     const exitNodes = state.nodes.filter(n => n.typeId === 'exit');
     let maxT = 0;
     if (exitNodes.length > 0) {
       maxT = Math.max(...exitNodes.map(n => n.maxTime));
     } else {
-      maxT = Math.max(...state.nodes.map(n => n.maxTime));
+      maxT = Math.max(...state.nodes.map(n => n.maxTime), 0);
     }
-
     state.totalEvacuationTime = maxT;
   }
 
@@ -313,10 +343,7 @@
     if (state.calculationMethod === 'A') {
       calcMethodA();
     } else {
-      // Method B Placeholder
-      // Fallback to A for now or implement partially
-      calcMethodA();
-      console.warn('Method B not fully implemented yet, fell back to A logic for internal times.');
+      calcMethodB();
     }
 
     // Update Display
@@ -1912,12 +1939,20 @@
   }
 
   function generateMathProof() {
-    let text = "DETAILED MATHEMATICAL PROOF (Method A)\n";
+    let text = "DETAILED MATHEMATICAL PROOF\n";
+
+    if (state.calculationMethod === 'B') {
+      text += "CALCULATION METHOD: B (Capacity / Throughput)\n";
+      text += "- Formula: Time = Number of People / Capacity\n";
+      text += "- Capacity (Q) = Specific Throughput (q) * Width (w)\n";
+    } else {
+      text += "CALCULATION METHOD: A (Travel Speed)\n";
+      text += "- Formula: Time = Length / Speed\n";
+    }
     text += "======================================\n\n";
     text += "ASSUMPTIONS & CONSTANTS:\n";
-    text += "- Calculation Method: Method A (Travel Time = Distance / Speed)\n";
     text += "- Regulation Source: Ordinance Iz-1971, Annex 8a\n";
-    text += "- Table 11 Used for Speed (v) determination based on Density (D)\n\n";
+    text += "- Table 11 Used for Flow Parameters (v, q) based on Density (D)\n\n";
 
     text += "STEP-BY-STEP CALCULATION:\n\n";
 
@@ -1947,18 +1982,31 @@
       text += `     - People (P) = ${srcPeople} (from incoming/source)\n`;
       text += `     - Density (D)= P / A = ${srcPeople} / ${(c.distance * (c.width || 1.2)).toFixed(2)} = ${stats.density.toFixed(2)} p/m²\n`;
 
-      text += `  3. Speed Determination (Table 11):\n`;
+      text += `  3. Parameter Determination (Table 11):\n`;
       text += `     - Segment Type: ${c.typeId}\n`;
-      text += `     - Based on D = ${stats.density.toFixed(2)}, Interpolated/Lookup Speed (v) = ${stats.v.toFixed(2)} m/min\n`;
 
-      text += `  4. Travel Time (t):\n`;
-      text += `     - t = L / v = ${c.distance.toFixed(2)} / ${stats.v.toFixed(2)} = ${stats.time.toFixed(4)} min\n`;
+      if (state.calculationMethod === 'B') {
+        text += `     - Based on D = ${stats.density.toFixed(2)}, Specific Throughput (q) = ${stats.q.toFixed(2)} p/m/min\n`;
+        text += `     - Capacity (Q) = q * W = ${stats.q.toFixed(2)} * ${(c.width || 1.2).toFixed(2)} = ${stats.Q.toFixed(2)} p/min\n`;
+        text += `  4. Evacuation Time (t):\n`;
+        if (srcPeople <= 0) {
+          text += `     - t = 0 (No people)\n`;
+        } else if (stats.Q <= 0.1) {
+          text += `     - t = INFINITE (Blocked)\n`;
+        } else {
+          text += `     - t = P / Q = ${srcPeople} / ${stats.Q.toFixed(2)} = ${stats.time.toFixed(4)} min\n`;
+        }
+      } else {
+        text += `     - Based on D = ${stats.density.toFixed(2)}, Speed (v) = ${stats.v.toFixed(2)} m/min\n`;
+        text += `  4. Travel Time (t):\n`;
+        text += `     - t = L / v = ${c.distance.toFixed(2)} / ${stats.v.toFixed(2)} = ${stats.time.toFixed(4)} min\n`;
+      }
 
       text += `  ---------------------------------------------------\n\n`;
     });
 
     text += "CRITICAL PATH ANALYSIS:\n";
-    text += "Total Evacuation Time is determined by the longest path duration.\n\n";
+    text += "Total Evacuation Time is determined by the longest path cumulative duration.\n\n";
 
     // Find Exit node with max time
     const exits = state.nodes.filter(n => n.typeId === 'exit');
