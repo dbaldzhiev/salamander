@@ -469,10 +469,12 @@
       sourceId: conn.sourceId,
       targetId: newNode.id,
       typeId: conn.typeId,
+      direction: conn.direction,
       distance: Math.round(dist(src, newNode) * 10) / 10,
       distanceManual: false,
       speed: conn.speed,
       weight: conn.weight,
+      congestion: conn.congestion,
       props: { ...conn.props },
     };
     const conn2 = {
@@ -480,10 +482,12 @@
       sourceId: newNode.id,
       targetId: conn.targetId,
       typeId: conn.typeId,
+      direction: conn.direction,
       distance: Math.round(dist(newNode, tgt) * 10) / 10,
       distanceManual: false,
       speed: conn.speed,
       weight: conn.weight,
+      congestion: conn.congestion,
       props: { ...conn.props },
     };
 
