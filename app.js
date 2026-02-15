@@ -12,7 +12,7 @@
     nodes: [],
     connections: [],
     nodeTypes: [
-      { id: 'default', name: 'Default', color: '#58a6ff' },
+      { id: 'undefined', name: 'Undefined', color: '#6e7681' }, // Changed from default
       { id: 'start', name: 'Start', color: '#3fb950' },
       { id: 'start2', name: 'Secondary Start', color: '#39d2c0' },
       { id: 'waypoint', name: 'Waypoint', color: '#d29922' },
@@ -562,7 +562,7 @@
     const newNode = {
       id: state.nextNodeId++,
       name: '',
-      typeId: state.nodeTypes[0].id,
+      typeId: 'waypoint', // Split nodes vary are waypoints
       x: sx,
       y: sy,
       props: {},
@@ -601,18 +601,34 @@
     state.connections = state.connections.filter(c => c.id !== conn.id);
     state.connections.push(conn1, conn2);
 
+    recalcPeopleCounts();
     return newNode;
   }
 
   // ─── Node & Connection Ops ────────────────────────────────
   function createNode(wx, wy) {
+    // Auto-assign type based on creation order
+    let typeId = 'undefined';
+    let people = 0;
+
+    if (state.nodes.length === 0) {
+      typeId = 'start';
+      people = 10;
+    } else if (state.nodes.length === 1) {
+      typeId = 'exit';
+      people = 0; // Exit nodes calculated from incoming
+    } else {
+      typeId = 'start2'; // Secondary Start for others
+      people = 6;
+    }
+
     const node = {
       id: state.nextNodeId++,
       name: '',
-      typeId: state.nodeTypes[0].id,
+      typeId: typeId,
       x: snapToGrid(wx),
       y: snapToGrid(wy),
-      people: 0,
+      people: people,
       props: {},
     };
     state.nodes.push(node);
@@ -1236,7 +1252,18 @@
         break;
       }
       case 'addNode': {
-        createNode(w.x, w.y);
+        // Check if clicking on a connection to split it
+        const hitConn = hitTestConnectionWithPoint(w.x, w.y);
+        if (hitConn) {
+          const newNode = splitConnection(hitConn.conn, hitConn.proj.x, hitConn.proj.y);
+          if (newNode) {
+            selectItem({ type: 'node', id: newNode.id });
+            render();
+          }
+        } else {
+          // Otherwise create freestanding node
+          createNode(w.x, w.y);
+        }
         hideHint();
         break;
       }
