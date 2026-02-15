@@ -40,6 +40,16 @@
   let isPanning = false;
   let panStart = { x: 0, y: 0 };
 
+  // Hint auto-hide
+  let hintHidden = false;
+  function hideHint() {
+    if (!hintHidden) {
+      hint.style.opacity = '0';
+      hintHidden = true;
+      setTimeout(() => hint.style.display = 'none', 400);
+    }
+  }
+
   const NODE_RADIUS = 50;
   const HIT_MARGIN = 8;
   const GRID_SIZE = 100;
@@ -980,7 +990,9 @@
   }
 
   function escHtml(s) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    if (s == null) return '';
+    const str = String(s);
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   // ─── Table Rendering ─────────────────────────────────────
@@ -1638,59 +1650,61 @@
     render();
   });
 
-  document.getElementById('btnExport').addEventListener('click', () => {
-    const data = {
-      nodes: state.nodes,
-      connections: state.connections,
-      nodeTypes: state.nodeTypes,
-      connTypes: state.connTypes,
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'graph.json';
-    a.click();
-    URL.revokeObjectURL(url);
-  });
-
-  document.getElementById('btnImport').addEventListener('click', () => {
-    document.getElementById('importFile').click();
-  });
-
-  document.getElementById('importFile').addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const data = JSON.parse(ev.target.result);
-        if (data.nodes) state.nodes = data.nodes;
-        if (data.connections) state.connections = data.connections;
-        if (data.nodeTypes) state.nodeTypes = data.nodeTypes;
-        if (data.connTypes) state.connTypes = data.connTypes;
-        state.nextNodeId = Math.max(0, ...state.nodes.map(n => n.id)) + 1;
-        state.nextConnId = Math.max(0, ...state.connections.map(c => c.id)) + 1;
-        clearSelection();
-        renderTypeManager();
-        render();
-      } catch (err) {
-        alert('Failed to import: ' + err.message);
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  });
-
-  // ─── Hint auto-hide ──────────────────────────────────────
-  let hintHidden = false;
-  function hideHint() {
-    if (!hintHidden) {
-      hint.style.opacity = '0';
-      hintHidden = true;
-      setTimeout(() => hint.style.display = 'none', 400);
-    }
+  const btnExport = document.getElementById('btnExport');
+  if (btnExport) {
+    btnExport.addEventListener('click', () => {
+      const data = {
+        nodes: state.nodes,
+        connections: state.connections,
+        nodeTypes: state.nodeTypes,
+        connTypes: state.connTypes,
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'graph.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
   }
+
+  const btnImport = document.getElementById('btnImport');
+  if (btnImport) {
+    btnImport.addEventListener('click', () => {
+      const fileInput = document.getElementById('importFile');
+      if (fileInput) fileInput.click();
+    });
+  }
+
+  const importFile = document.getElementById('importFile');
+  if (importFile) {
+    importFile.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target.result);
+          if (data.nodes) state.nodes = data.nodes;
+          if (data.connections) state.connections = data.connections;
+          if (data.nodeTypes) state.nodeTypes = data.nodeTypes;
+          if (data.connTypes) state.connTypes = data.connTypes;
+          state.nextNodeId = Math.max(0, ...state.nodes.map(n => n.id)) + 1;
+          state.nextConnId = Math.max(0, ...state.connections.map(c => c.id)) + 1;
+          clearSelection();
+          renderTypeManager();
+          render();
+        } catch (err) {
+          alert('Failed to import: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+  }
+
+
 
   // ─── Init ────────────────────────────────────────────────
   function init() {
@@ -1725,4 +1739,240 @@
 
   // Convert HSL colors to hex for type manager (when creating via random hue)
   // The canvas handles hsl() strings natively, so no conversion needed.
+  // ─── Report Generation ────────────────────────────────────
+  const reportModal = document.getElementById('report-modal');
+  const btnReport = document.getElementById('btnReport');
+  const btnCloseReport = document.getElementById('btnCloseReport');
+  const repTotalTime = document.getElementById('repTotalTime');
+  const repTotalPeople = document.getElementById('repTotalPeople');
+  const repCriticalPath = document.getElementById('repCriticalPath');
+  const reportTableBody = document.getElementById('reportTableBody');
+  const mathProofContent = document.getElementById('mathProofContent');
+  const reportCanvas = document.getElementById('reportCanvas');
+  const repCtx = reportCanvas && reportCanvas.getContext('2d'); // Check existence
+
+  if (btnReport) btnReport.addEventListener('click', showReport);
+  if (btnCloseReport) btnCloseReport.addEventListener('click', () => reportModal.style.display = 'none');
+  if (reportModal) reportModal.addEventListener('click', (e) => {
+    if (e.target === reportModal) reportModal.style.display = 'none';
+  });
+
+  function showReport() {
+    reportModal.style.display = 'flex';
+    generateReportSummary();
+    generateReportDiagram();
+    generateReportTable();
+    generateMathProof();
+  }
+
+  function generateReportSummary() {
+    // Total Time
+    repTotalTime.textContent = state.totalEvacuationTime.toFixed(2);
+
+    // Total People (sum of people at Start nodes)
+    const totalPeople = state.nodes.reduce((acc, n) => {
+      if (['start', 'start2'].includes(n.typeId)) return acc + (n.people || 0);
+      return acc;
+    }, 0);
+    repTotalPeople.textContent = totalPeople;
+
+    // Critical Path Nodes (nodes with maxTime equal to totalTime)
+    // This is a naive check, ideally we trace back from exit
+    const criticalNodes = state.nodes.filter(n => Math.abs(n.maxTime - state.totalEvacuationTime) < 0.01);
+    repCriticalPath.textContent = criticalNodes.length;
+  }
+
+  function generateReportDiagram() {
+    // 1. Calculate bounding box
+    if (state.nodes.length === 0) return;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    state.nodes.forEach(n => {
+      minX = Math.min(minX, n.x - NODE_RADIUS);
+      maxX = Math.max(maxX, n.x + NODE_RADIUS);
+      minY = Math.min(minY, n.y - NODE_RADIUS);
+      maxY = Math.max(maxY, n.y + NODE_RADIUS);
+    });
+
+    // Add padding
+    const padding = 100;
+    minX -= padding; maxX += padding;
+    minY -= padding; maxY += padding;
+
+    const width = maxX - minX;
+    const height = maxY - minY;
+
+    // 2. Setup canvas
+    reportCanvas.width = width;
+    reportCanvas.height = height;
+
+    // 3. Render
+    // We need a temp camera to shift origin
+    const originalCam = { ...cam };
+    cam = { x: -minX, y: -minY, zoom: 1 }; // Reset zoom to 1, shift to top-left
+
+    // Clear
+    repCtx.fillStyle = '#161b22';
+    repCtx.fillRect(0, 0, width, height);
+
+    // Draw Grid (custom for report)
+    repCtx.beginPath();
+    repCtx.strokeStyle = 'rgba(48,54,61,.4)';
+    repCtx.lineWidth = 1;
+    for (let x = 0; x <= width; x += 100) {
+      repCtx.moveTo(x, 0); repCtx.lineTo(x, height);
+    }
+    for (let y = 0; y <= height; y += 100) {
+      repCtx.moveTo(0, y); repCtx.lineTo(width, y);
+    }
+    repCtx.stroke();
+
+    // Use existing draw functions but patch ctx temporarily? 
+    // Easier to just copy relevant draw logic or refactor. 
+    // Let's refactor drawNode/drawConnection to take a context and cam, OR just use the global ctx after swapping canvas?
+    // Swapping canvas is risky with event listeners.
+    // Let's write simple render logic here to be safe and clean.
+
+    state.connections.forEach(c => {
+      const src = state.nodes.find(n => n.id === c.sourceId);
+      const tgt = state.nodes.find(n => n.id === c.targetId);
+      if (!src || !tgt) return;
+
+      const sx = src.x - minX; const sy = src.y - minY;
+      const ex = tgt.x - minX; const ey = tgt.y - minY;
+
+      repCtx.beginPath();
+      repCtx.strokeStyle = '#58a6ff';
+      repCtx.lineWidth = Math.max(2, (c.width || 1.2) * 20); // Scale width for visibility
+      repCtx.moveTo(sx, sy);
+      repCtx.lineTo(ex, ey);
+      repCtx.stroke();
+
+      // Arrow
+      const angle = Math.atan2(ey - sy, ex - sx);
+      repCtx.beginPath();
+      repCtx.fillStyle = '#58a6ff';
+      repCtx.arc(ex - Math.cos(angle) * 30, ey - Math.sin(angle) * 30, 5, 0, Math.PI * 2);
+      repCtx.fill();
+    });
+
+    state.nodes.forEach(n => {
+      const x = n.x - minX;
+      const y = n.y - minY;
+
+      repCtx.beginPath();
+      repCtx.arc(x, y, NODE_RADIUS, 0, Math.PI * 2);
+      repCtx.fillStyle = '#21262d';
+      repCtx.fill();
+      repCtx.strokeStyle = '#e6edf3';
+      repCtx.lineWidth = 2;
+      repCtx.stroke();
+
+      repCtx.fillStyle = '#e6edf3';
+      repCtx.font = '24px Inter';
+      repCtx.textAlign = 'center';
+      repCtx.textBaseline = 'middle';
+      repCtx.fillText(n.name || n.id, x, y);
+    });
+
+    // Restore cam
+    cam = originalCam;
+  }
+
+  function generateReportTable() {
+    let html = '';
+    let step = 1;
+
+    // Simple sorting: by maxTime (approximate sequence from start)
+    const sortedConns = [...state.connections].sort((a, b) => {
+      const srcA = state.nodes.find(n => n.id === a.sourceId);
+      const srcB = state.nodes.find(n => n.id === b.sourceId);
+      return (srcA?.maxTime || 0) - (srcB?.maxTime || 0);
+    });
+
+    sortedConns.forEach(c => {
+      const src = state.nodes.find(n => n.id === c.sourceId);
+      const tgt = state.nodes.find(n => n.id === c.targetId);
+      if (!src || !tgt) return;
+
+      const stats = c.calcStats || { density: 0, v: 0, time: 0 };
+
+      html += `<tr>
+        <td>${step++}</td>
+        <td>${escHtml(src.name || src.id)}</td>
+        <td>${escHtml(tgt.name || tgt.id)}</td>
+        <td>${c.typeId}</td>
+        <td>${c.distance.toFixed(2)}</td>
+        <td>${(c.width || 1.2).toFixed(2)}</td>
+        <td>${stats.density.toFixed(2)}</td>
+        <td>${stats.v.toFixed(2)}</td>
+        <td>${stats.time.toFixed(2)}</td>
+      </tr>`;
+    });
+    reportTableBody.innerHTML = html;
+  }
+
+  function generateMathProof() {
+    let text = "DETAILED MATHEMATICAL PROOF (Method A)\n";
+    text += "======================================\n\n";
+    text += "ASSUMPTIONS & CONSTANTS:\n";
+    text += "- Calculation Method: Method A (Travel Time = Distance / Speed)\n";
+    text += "- Regulation Source: Ordinance Iz-1971, Annex 8a\n";
+    text += "- Table 11 Used for Speed (v) determination based on Density (D)\n\n";
+
+    text += "STEP-BY-STEP CALCULATION:\n\n";
+
+    // Trace path
+    const sortedConns = [...state.connections].sort((a, b) => {
+      const srcA = state.nodes.find(n => n.id === a.sourceId);
+      const srcB = state.nodes.find(n => n.id === b.sourceId);
+      return (srcA?.maxTime || 0) - (srcB?.maxTime || 0);
+    });
+
+    sortedConns.forEach(c => {
+      const src = state.nodes.find(n => n.id === c.sourceId);
+      const tgt = state.nodes.find(n => n.id === c.targetId);
+      if (!src || !tgt) return;
+
+      const stats = c.calcStats;
+      if (!stats) return;
+
+      text += `SEGMENT [${src.name || src.id}] -> [${tgt.name || tgt.id}]:\n`;
+      text += `  1. Geometry:\n`;
+      text += `     - Length (L) = ${c.distance.toFixed(2)} m\n`;
+      text += `     - Width (W)  = ${(c.width || 1.2).toFixed(2)} m\n`;
+      text += `     - Area (A)   = L * W = ${(c.distance * (c.width || 1.2)).toFixed(2)} m²\n`;
+
+      const srcPeople = src.people || 0;
+      text += `  2. Flow Parameters:\n`;
+      text += `     - People (P) = ${srcPeople} (from incoming/source)\n`;
+      text += `     - Density (D)= P / A = ${srcPeople} / ${(c.distance * (c.width || 1.2)).toFixed(2)} = ${stats.density.toFixed(2)} p/m²\n`;
+
+      text += `  3. Speed Determination (Table 11):\n`;
+      text += `     - Segment Type: ${c.typeId}\n`;
+      text += `     - Based on D = ${stats.density.toFixed(2)}, Interpolated/Lookup Speed (v) = ${stats.v.toFixed(2)} m/min\n`;
+
+      text += `  4. Travel Time (t):\n`;
+      text += `     - t = L / v = ${c.distance.toFixed(2)} / ${stats.v.toFixed(2)} = ${stats.time.toFixed(4)} min\n`;
+
+      text += `  ---------------------------------------------------\n\n`;
+    });
+
+    text += "CRITICAL PATH ANALYSIS:\n";
+    text += "Total Evacuation Time is determined by the longest path duration.\n\n";
+
+    // Find Exit node with max time
+    const exits = state.nodes.filter(n => n.typeId === 'exit');
+    if (exits.length > 0) {
+      exits.forEach(e => {
+        text += `Exit Node [${e.name || e.id}]: Cumulative Time = ${e.maxTime.toFixed(4)} min\n`;
+      });
+      const max = Math.max(...exits.map(e => e.maxTime));
+      text += `\nFINAL RESULT: Total Evacuation Time = ${max.toFixed(2)} min\n`;
+    } else {
+      text += "No Exit nodes defined.\n";
+    }
+
+    mathProofContent.textContent = text;
+  }
+
 })();
