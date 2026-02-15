@@ -249,6 +249,200 @@
     return { v: val.v, q: val.q };
   }
 
+  function getLimitParams(typeId) {
+    if (!state.regulations || !state.regulations.limits) return { q_max: 164, q_gran: 135, v_gran: 14 };
+
+    const limits = state.regulations.limits;
+    let grp = limits.horizontal;
+    if (typeId === 'stairs_up') grp = limits.stairs_up;
+    else if (typeId === 'stairs_down') grp = limits.stairs_down;
+    else if (typeId && typeId.includes('door')) grp = limits.doors;
+
+    return {
+      q_max: grp.q_max,
+      q_gran: grp.q_gran,
+      v_gran: grp.v_gran
+    };
+  }
+
+  function sortConnectionsTopologically() {
+    // Basic Kahn's algorithm or DFS based on graph structure
+    // We need to order connections so we process upstream before downstream
+
+    // 1. Build adjacency
+    const adj = new Map();
+    state.nodes.forEach(n => adj.set(n.id, []));
+    state.connections.forEach(c => {
+      if (!adj.has(c.sourceId)) adj.set(c.sourceId, []);
+      adj.get(c.sourceId).push(c);
+    });
+
+    // 2. Compute in-degree for CONNECTIONS?
+    // Actually we need to traverse from Start Nodes.
+    // Let's do a BFS/Traversal from all Start nodes.
+
+    const sorted = [];
+    const visited = new Set();
+    const queue = [];
+
+    // Find start nodes
+    const startNodes = state.nodes.filter(n => ['start', 'start2'].includes(n.typeId));
+    startNodes.forEach(n => {
+      if (adj.has(n.id)) {
+        adj.get(n.id).forEach(c => {
+          if (!visited.has(c.id)) {
+            visited.add(c.id);
+            queue.push(c);
+          }
+        });
+      }
+    });
+
+    // This simple BFS might not respect true topology if there are merges where one branch is longer.
+    // Standard approach: Assign "order" to nodes.
+    // Let's stick to the existing propagation logic in 'propagateMaxTime' which was repeated pass.
+    // BUT for flow propagation, we need rigorous order.
+
+    // Alternative: Kahn's algo on the graph of segments.
+    // Node In-Degree.
+    const nodeInDegree = new Map();
+    state.nodes.forEach(n => nodeInDegree.set(n.id, 0));
+    state.connections.forEach(c => {
+      const d = nodeInDegree.get(c.targetId) || 0;
+      nodeInDegree.set(c.targetId, d + 1);
+    });
+
+    const nodeQueue = state.nodes.filter(n => (nodeInDegree.get(n.id) || 0) === 0);
+    const sortedNodes = [];
+
+    while (nodeQueue.length > 0) {
+      const n = nodeQueue.shift();
+      sortedNodes.push(n);
+
+      const outConns = state.connections.filter(c => c.sourceId === n.id);
+      outConns.forEach(c => {
+        const tgtId = c.targetId;
+        nodeInDegree.set(tgtId, (nodeInDegree.get(tgtId) || 0) - 1);
+        if (nodeInDegree.get(tgtId) === 0) {
+          const tgtNode = state.nodes.find(x => x.id === tgtId);
+          if (tgtNode) nodeQueue.push(tgtNode);
+        }
+      });
+    }
+
+    // If graph has cycles, some nodes won't be in sortedNodes.
+    // Fallback: add remaining nodes.
+    state.nodes.forEach(n => {
+      if (!sortedNodes.includes(n)) sortedNodes.push(n);
+    });
+
+    // Now flatten to connections
+    const sortedConns = [];
+    sortedNodes.forEach(n => {
+      const out = state.connections.filter(c => c.sourceId === n.id);
+      sortedConns.push(...out);
+    });
+
+    return sortedConns;
+  }
+
+  function getLimitParams(typeId) {
+    if (!state.regulations || !state.regulations.limits) return { q_max: 164, q_gran: 135, v_gran: 14 };
+
+    const limits = state.regulations.limits;
+    let grp = limits.horizontal;
+    if (typeId === 'stairs_up') grp = limits.stairs_up;
+    else if (typeId === 'stairs_down') grp = limits.stairs_down;
+    else if (typeId && typeId.includes('door')) grp = limits.doors;
+
+    return {
+      q_max: grp.q_max,
+      q_gran: grp.q_gran,
+      v_gran: grp.v_gran
+    };
+  }
+
+  function sortConnectionsTopologically() {
+    // Basic Kahn's algorithm or DFS based on graph structure
+    // We need to order connections so we process upstream before downstream
+
+    // 1. Build adjacency
+    const adj = new Map();
+    state.nodes.forEach(n => adj.set(n.id, []));
+    state.connections.forEach(c => {
+      if (!adj.has(c.sourceId)) adj.set(c.sourceId, []);
+      adj.get(c.sourceId).push(c);
+    });
+
+    // 2. Compute in-degree for CONNECTIONS?
+    // Actually we need to traverse from Start Nodes.
+    // Let's do a BFS/Traversal from all Start nodes.
+
+    const sorted = [];
+    const visited = new Set();
+    const queue = [];
+
+    // Find start nodes
+    const startNodes = state.nodes.filter(n => ['start', 'start2'].includes(n.typeId));
+    startNodes.forEach(n => {
+      if (adj.has(n.id)) {
+        adj.get(n.id).forEach(c => {
+          if (!visited.has(c.id)) {
+            visited.add(c.id);
+            queue.push(c);
+          }
+        });
+      }
+    });
+
+    // This simple BFS might not respect true topology if there are merges where one branch is longer.
+    // Standard approach: Assign "order" to nodes.
+    // Let's stick to the existing propagation logic in 'propagateMaxTime' which was repeated pass.
+    // BUT for flow propagation, we need rigorous order.
+
+    // Alternative: Kahn's algo on the graph of segments.
+    // Node In-Degree.
+    const nodeInDegree = new Map();
+    state.nodes.forEach(n => nodeInDegree.set(n.id, 0));
+    state.connections.forEach(c => {
+      const d = nodeInDegree.get(c.targetId) || 0;
+      nodeInDegree.set(c.targetId, d + 1);
+    });
+
+    const nodeQueue = state.nodes.filter(n => (nodeInDegree.get(n.id) || 0) === 0);
+    const sortedNodes = [];
+
+    while (nodeQueue.length > 0) {
+      const n = nodeQueue.shift();
+      sortedNodes.push(n);
+
+      const outConns = state.connections.filter(c => c.sourceId === n.id);
+      outConns.forEach(c => {
+        const tgtId = c.targetId;
+        nodeInDegree.set(tgtId, (nodeInDegree.get(tgtId) || 0) - 1);
+        if (nodeInDegree.get(tgtId) === 0) {
+          const tgtNode = state.nodes.find(x => x.id === tgtId);
+          if (tgtNode) nodeQueue.push(tgtNode);
+        }
+      });
+    }
+
+    // If graph has cycles, some nodes won't be in sortedNodes.
+    // Fallback: add remaining nodes.
+    state.nodes.forEach(n => {
+      if (!sortedNodes.includes(n)) sortedNodes.push(n);
+    });
+
+    // Now flatten to connections
+    const sortedConns = [];
+    sortedNodes.forEach(n => {
+      const out = state.connections.filter(c => c.sourceId === n.id);
+      sortedConns.push(...out);
+    });
+
+    return sortedConns;
+  }
+
   function calcMethodA() {
     // Method A: Sum of travel times (Length / Speed)
     state.connections.forEach(conn => {
@@ -275,53 +469,123 @@
     // Method B: Capacity / Throughput (Number of People / (Specific Throughput * Width))
     // t = N / Q, where Q = q * w
 
-    // Reset congestion
-    state.connections.forEach(c => c.congestion = 'none');
+    // Reset state: congestion, time, temporary flow tracking
+    state.connections.forEach(c => {
+      c.congestion = 'none';
+      c.travelTime = 0;
+      c.flowState = { Q_in: 0, q_spec: 0, Q_out: 0, hasQueue: false };
+    });
 
-    state.connections.forEach(conn => {
+    // 2. Topological Sort to ensure upstream is processed first
+    const sortedConns = sortConnectionsTopologically();
+
+    sortedConns.forEach(conn => {
+      const src = state.nodes.find(n => n.id === conn.sourceId);
       const p = getSegmentParams(conn);
-      if (!p) { conn.travelTime = 0; return; }
+      if (!p || !src) return;
 
-      const area = p.length * p.width;
-      const density = area > 0 ? p.people / area : 0;
+      let q_curr = 0;   // Specific flow (p/m/min)
+      let Q_curr = 0;   // Total flow (p/min)
+      let v_curr = 0;   // Speed (m/min)
 
-      const { q } = lookupTable11(p.type, density);
+      // --- Step 1: Determine Incoming Flow ---
+      const incomingConns = state.connections.filter(c => c.targetId === conn.sourceId);
+      const isInitial = incomingConns.length === 0 || ['start', 'start2'].includes(src.typeId);
 
-      // Capacity Q (people / min)
-      const Q = q * p.width;
+      if (isInitial) {
+        // Initial: Compute from Density (D = N/A)
+        const area = p.length * p.width;
+        const density = area > 0 ? (src.people || 0) / area : 0;
+        const table = lookupTable11(p.type, density);
+        v_curr = table.v;
+        q_curr = table.q;
+        Q_curr = q_curr * p.width;
 
-      // Check Congestion limits (q_max)
-      // Get limit from table 11 max or regulations.limits
-      let q_max = 164.2; // default horiz
-      if (state.regulations && state.regulations.limits) {
-        const limits = state.regulations.limits;
-        if (p.type === 'normal') q_max = limits.horizontal.q_max;
-        else if (p.type === 'stairs_up') q_max = limits.stairs_up.q_max;
-        else if (p.type === 'stairs_down') q_max = limits.stairs_down.q_max;
-        else if (p.type.includes('door')) q_max = limits.doors.q_max;
-      }
-
-      // Check specific flow q vs q_max
-      // If q > q_max, it's a bottleneck (Binary State)
-      if (q > q_max) {
-        conn.congestion = 'blocked';
-        conn.travelTime = 9999; // Effectively blocked
+        // Formula 1: t = L / v
+        conn.travelTime = v_curr > 0.1 ? p.length / v_curr : 0;
       } else {
-        conn.congestion = 'none';
+        // Downstream: Propagate Flow (Sum of Q_prev)
+        let Q_total_in = 0;
+        incomingConns.forEach(inc => {
+          Q_total_in += (inc.flowState ? inc.flowState.Q_out : 0);
+        });
+
+        // Distribute flow if branching (proportional to width)
+        const outConns = state.connections.filter(c => c.sourceId === conn.sourceId);
+        const totalOutWidth = outConns.reduce((sum, c) => sum + (parseFloat(c.props.width) || 1.2), 0);
+        const ratio = totalOutWidth > 0 ? (p.width / totalOutWidth) : 1;
+
+        Q_curr = Q_total_in * ratio;
+        q_curr = p.width > 0 ? Q_curr / p.width : 0;
       }
 
-      // Time in minutes = People / Q
-      // If N=0, time=0. 
-      // If Q=0 but N>0, time is infinite.
-      if (conn.congestion !== 'blocked') {
-        if (p.people <= 0) {
-          conn.travelTime = 0;
-        } else {
-          conn.travelTime = Q > 0.1 ? p.people / Q : 9999;
+      // --- Step 2: Bottleneck Check & Queue Handling ---
+      const limits = getLimitParams(p.type);
+      const q_max = limits.q_max;
+
+      let hasQueue = false;
+      let final_Q_out = Q_curr;
+
+      if (q_curr > q_max) {
+        // Case B: Queue Forms
+        hasQueue = true;
+        conn.congestion = 'blocked';
+
+        // Formula 2: t = N / (w * q_gran)
+        // N = people count in segment (using src.people as load)
+        const N = p.people || 0;
+        const denom = p.width * limits.q_gran;
+
+        conn.travelTime = denom > 0.1 ? N / denom : 9999;
+
+        // Propagate BOUNDARY flow downstream
+        final_Q_out = p.width * limits.q_gran;
+
+      } else {
+        // Case A: No Queue
+        conn.congestion = 'none';
+        final_Q_out = Q_curr;
+
+        if (!isInitial) {
+          // Determine speed from q_curr (Conservative lookup)
+          const tableData = state.regulations.table_11_flow_params.data;
+          // Find row where table_q >= q_curr
+          let row = tableData.find(r => {
+            const cell = (r[p.type] || r['horiz']);
+            return cell.q >= q_curr;
+          });
+          if (!row) row = tableData[tableData.length - 1];
+
+          const cell = (row[p.type === 'horiz' ? 'horiz' : p.type] || row['horiz']);
+          v_curr = cell.v || 100;
+
+          conn.travelTime = v_curr > 0.1 ? p.length / v_curr : 0;
         }
       }
 
-      conn.calcStats = { density, v: 0, q, Q, time: conn.travelTime, method: 'B' };
+      // Door Logic: Thin Wall (<=0.7m) -> t=0 if no queue
+      if (p.type.includes('door') && p.length <= 0.7 && !hasQueue) {
+        conn.travelTime = 0;
+      }
+
+      // Store state for downstream
+      conn.flowState = {
+        Q_in: Q_curr,
+        q_spec: q_curr,
+        Q_out: final_Q_out,
+        hasQueue: hasQueue
+      };
+
+      conn.calcStats = {
+        density: 0,
+        v: v_curr,
+        q: q_curr,
+        Q: Q_curr,
+        time: conn.travelTime,
+        method: 'B',
+        q_max: q_max,
+        q_gran: limits.q_gran
+      };
     });
 
     propagateMaxTime();
@@ -548,10 +812,9 @@
     const widthMeters = conn.width || 1.2;
     const pixelWidth = Math.max(2, widthMeters * PIXELS_PER_METER * cam.zoom);
 
-    // Determine color: congestion overrides type color
-    const congColor = CONGESTION_COLORS[congestion];
-    const lineColor = isSelected ? '#fff' : (congColor || ct.color);
-    // const lineWidth = isSelected ? 3 : (CONGESTION_WIDTH[congestion] || 2); 
+    // Restore lineColor for arrows and base line
+    // Normal representation = type color (unless selected)
+    const lineColor = isSelected ? '#fff' : ct.color;
 
     const s = worldToScreen(src.x, src.y);
     const e = worldToScreen(tgt.x, tgt.y);
@@ -559,23 +822,35 @@
     // Dash pattern based on type
     ctx.setLineDash(ct.dash || []);
 
-    // Line (Transparent)
+    // 1. Draw Base Line (Normal Representation)
     ctx.save();
-    ctx.globalAlpha = 0.6; // Make connection line semi-transparent
+    ctx.globalAlpha = 0.6;
     ctx.beginPath();
     ctx.strokeStyle = lineColor;
     ctx.lineWidth = pixelWidth;
-    ctx.lineCap = 'butt'; // clean ends for thick lines
+    ctx.lineCap = 'butt';
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(e.x, e.y);
+    ctx.stroke();
+    ctx.restore();
 
-    // Zig-Zag for Congestion
-    if (congestion === 'high' || congestion === 'blocked') {
-      const zigzagStep = 10;
-      const zigzagAmp = pixelWidth / 2 + 3;
+    // 2. Zig-Zag Overlay for Congestion
+    if (congestion === 'blocked') {
+      ctx.save();
+      const zigzagStep = Math.max(15, pixelWidth * 0.8);
+      // Amplitude = half width of normal line below (pixelWidth / 2)
+      const zigzagAmp = pixelWidth / 2;
+
       const dx = e.x - s.x;
       const dy = e.y - s.y;
       const len = Math.sqrt(dx * dx + dy * dy);
+
       const nx = -dy / len;
       const ny = dx / len;
+
+      ctx.beginPath();
+      ctx.strokeStyle = '#f85149'; // Red Overlay
+      ctx.lineWidth = 7; // Fixed width for overlay visibility
 
       ctx.moveTo(s.x, s.y);
       for (let d = 0; d < len; d += zigzagStep) {
@@ -585,15 +860,12 @@
         ctx.lineTo(px, py);
       }
       ctx.lineTo(e.x, e.y);
-    } else {
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(e.x, e.y);
+      ctx.stroke();
+      ctx.restore();
     }
 
-    ctx.stroke();
+    // Restore context state (though save/restore handles it)
     ctx.setLineDash([]);
-    ctx.lineCap = 'round'; // reset
-    ctx.restore(); // Restore alpha
 
     // Highlight border if selected (since color is white, maybe dark border?)
     if (isSelected) {
@@ -2036,30 +2308,44 @@
       text += `  1. Geometry:\n`;
       text += `     - Length (L) = ${c.distance.toFixed(2)} m\n`;
       text += `     - Width (W)  = ${(c.width || 1.2).toFixed(2)} m\n`;
-      text += `     - Area (A)   = L * W = ${(c.distance * (c.width || 1.2)).toFixed(2)} m²\n`;
-
-      const srcPeople = src.people || 0;
-      text += `  2. Flow Parameters:\n`;
-      text += `     - People (P) = ${srcPeople} (from incoming/source)\n`;
-      text += `     - Density (D)= P / A = ${srcPeople} / ${(c.distance * (c.width || 1.2)).toFixed(2)} = ${stats.density.toFixed(2)} p/m²\n`;
-
-      text += `  3. Parameter Determination (Table 11):\n`;
-      text += `     - Segment Type: ${c.typeId}\n`;
 
       if (state.calculationMethod === 'B') {
-        text += `     - Based on D = ${stats.density.toFixed(2)}, Specific Throughput (q) = ${stats.q.toFixed(2)} p/m/min\n`;
-        text += `     - Capacity (Q) = q * W = ${stats.q.toFixed(2)} * ${(c.width || 1.2).toFixed(2)} = ${stats.Q.toFixed(2)} p/min\n`;
-        text += `  4. Evacuation Time (t):\n`;
-        if (srcPeople <= 0) {
-          text += `     - t = 0 (No people)\n`;
-        } else if (stats.Q <= 0.1) {
-          text += `     - t = INFINITE (Blocked)\n`;
+        const fs = c.flowState || { Q_in: 0, q_spec: 0, hasQueue: false };
+
+        text += `  2. Flow Propagation:\n`;
+        text += `     - Incoming Flow (Q_in) = ${(fs.Q_in || 0).toFixed(2)} p/min\n`;
+        text += `     - Specific Flow (q) = Q_in / W = ${(fs.q_spec || 0).toFixed(2)} p/m/min\n`;
+
+        text += `  3. Bottleneck Check:\n`;
+        text += `     - Max Permissible (q_max) = ${stats.q_max} p/m/min\n`;
+        if (fs.hasQueue) {
+          text += `     - STATUS: QUEUE FORMS (q > q_max)\n`;
+          text += `     - Using Boundary Throughput (q_gran) = ${stats.q_gran}\n`;
         } else {
-          text += `     - t = P / Q = ${srcPeople} / ${stats.Q.toFixed(2)} = ${stats.time.toFixed(4)} min\n`;
+          text += `     - STATUS: NO QUEUE (q <= q_max)\n`;
         }
+
+        text += `  4. Time Calculation:\n`;
+        if (fs.hasQueue) {
+          // Formula 2
+          const N = getSegmentParams(c).people || 0; // Just for display
+          text += `     - Method: Formula 2 (Queue)\n`;
+          text += `     - Time = N / (W * q_gran) = ${N} / (${(c.width || 1.2).toFixed(2)} * ${stats.q_gran}) = ${stats.time.toFixed(4)} min\n`;
+        } else {
+          // Formula 1
+          text += `     - Method: Formula 1 (Travel Speed)\n`;
+          text += `     - Speed (v) = ${stats.v.toFixed(2)} m/min\n`;
+          text += `     - Time = L / v = ${c.distance.toFixed(2)} / ${stats.v.toFixed(2)} = ${stats.time.toFixed(4)} min\n`;
+        }
+
       } else {
-        text += `     - Based on D = ${stats.density.toFixed(2)}, Speed (v) = ${stats.v.toFixed(2)} m/min\n`;
-        text += `  4. Travel Time (t):\n`;
+        // Method A logic...
+        const area = c.distance * (c.width || 1.2);
+        const srcPeople = src.people || 0;
+        text += `  2. Flow Parameters:\n`;
+        text += `     - Density (D)= P / A = ${srcPeople} / ${area.toFixed(2)} = ${stats.density.toFixed(2)} p/m²\n`;
+        text += `     - Based on D, Speed (v) = ${stats.v.toFixed(2)} m/min\n`;
+        text += `  3. Travel Time (t):\n`;
         text += `     - t = L / v = ${c.distance.toFixed(2)} / ${stats.v.toFixed(2)} = ${stats.time.toFixed(4)} min\n`;
       }
 
