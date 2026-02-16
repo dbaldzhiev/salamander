@@ -1,0 +1,466 @@
+DETAILED MATHEMATICAL PROOF (Method B - Norm 2)
+===============================================
+
+SEGMENT [1] -> [3]:
+  1. Geometry:
+     - Length (ℓ) = 5.15 m
+     - Width (δ)  = 0.45 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Initial Segment: Flow derived from Population Density (D = N/A)
+     - Generated Flow (Q) = 68.00 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 151.10 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.1193 min
+  ---------------------------------------------------
+
+SEGMENT [4] -> [3]:
+  1. Geometry:
+     - Length (ℓ) = 1.90 m
+     - Width (δ)  = 0.45 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Initial Segment: Flow derived from Population Density (D = N/A)
+     - Generated Flow (Q) = 70.65 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 157.00 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.0484 min
+  ---------------------------------------------------
+
+SEGMENT [6] -> [7]:
+  1. Geometry:
+     - Length (ℓ) = 1.80 m
+     - Width (δ)  = 0.45 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Initial Segment: Flow derived from Population Density (D = N/A)
+     - Generated Flow (Q) = 59.76 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 132.80 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.0339 min
+  ---------------------------------------------------
+
+SEGMENT [5] -> [7]:
+  1. Geometry:
+     - Length (ℓ) = 4.60 m
+     - Width (δ)  = 0.45 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Initial Segment: Flow derived from Population Density (D = N/A)
+     - Generated Flow (Q) = 64.44 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 143.20 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.0964 min
+  ---------------------------------------------------
+
+SEGMENT [9] -> [11]:
+  1. Geometry:
+     - Length (ℓ) = 4.60 m
+     - Width (δ)  = 0.45 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Initial Segment: Flow derived from Population Density (D = N/A)
+     - Generated Flow (Q) = 64.44 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 143.20 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.0964 min
+  ---------------------------------------------------
+
+SEGMENT [10] -> [11]:
+  1. Geometry:
+     - Length (ℓ) = 1.80 m
+     - Width (δ)  = 0.45 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Initial Segment: Flow derived from Population Density (D = N/A)
+     - Generated Flow (Q) = 59.76 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 132.80 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.0339 min
+  ---------------------------------------------------
+
+SEGMENT [12] -> [14]:
+  1. Geometry:
+     - Length (ℓ) = 4.60 m
+     - Width (δ)  = 0.45 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Initial Segment: Flow derived from Population Density (D = N/A)
+     - Generated Flow (Q) = 64.44 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 143.20 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.0964 min
+  ---------------------------------------------------
+
+SEGMENT [13] -> [14]:
+  1. Geometry:
+     - Length (ℓ) = 1.80 m
+     - Width (δ)  = 0.45 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Initial Segment: Flow derived from Population Density (D = N/A)
+     - Generated Flow (Q) = 59.76 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 132.80 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.0339 min
+  ---------------------------------------------------
+
+SEGMENT [15] -> [19]:
+  1. Geometry:
+     - Length (ℓ) = 4.60 m
+     - Width (δ)  = 0.45 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Initial Segment: Flow derived from Population Density (D = N/A)
+     - Generated Flow (Q) = 64.44 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 143.20 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.0964 min
+  ---------------------------------------------------
+
+SEGMENT [20] -> [21]:
+  1. Geometry:
+     - Length (ℓ) = 5.30 m
+     - Width (δ)  = 0.45 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Initial Segment: Flow derived from Population Density (D = N/A)
+     - Generated Flow (Q) = 64.44 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 143.20 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.1110 min
+  ---------------------------------------------------
+
+SEGMENT [23] -> [24]:
+  1. Geometry:
+     - Length (ℓ) = 5.30 m
+     - Width (δ)  = 0.45 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Initial Segment: Flow derived from Population Density (D = N/A)
+     - Generated Flow (Q) = 64.44 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 143.20 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.1110 min
+  ---------------------------------------------------
+
+SEGMENT [25] -> [26]:
+  1. Geometry:
+     - Length (ℓ) = 5.30 m
+     - Width (δ)  = 0.45 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Initial Segment: Flow derived from Population Density (D = N/A)
+     - Generated Flow (Q) = 64.44 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 143.20 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.1110 min
+  ---------------------------------------------------
+
+SEGMENT [27] -> [28]:
+  1. Geometry:
+     - Length (ℓ) = 5.00 m
+     - Width (δ)  = 0.45 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Initial Segment: Flow derived from Population Density (D = N/A)
+     - Generated Flow (Q) = 68.00 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 151.10 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.1158 min
+  ---------------------------------------------------
+
+SEGMENT [29] -> [30]:
+  1. Geometry:
+     - Length (ℓ) = 5.70 m
+     - Width (δ)  = 1.00 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Initial Segment: Flow derived from Population Density (D = N/A)
+     - Generated Flow (Q) = 102.30 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 102.30 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.0836 min
+  ---------------------------------------------------
+
+SEGMENT [3] -> [7]:
+  1. Geometry:
+     - Length (ℓ) = 2.15 m
+     - Width (δ)  = 1.30 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Incoming Flow from Upstream (Q_in = Σ Q_prev) = 138.65 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 106.65 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 159.5 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.0272 min
+  ---------------------------------------------------
+
+SEGMENT [7] -> [11]:
+  1. Geometry:
+     - Length (ℓ) = 2.15 m
+     - Width (δ)  = 1.30 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Incoming Flow from Upstream (Q_in = Σ Q_prev) = 262.85 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 202.19 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 159.5 p/m/min
+     - VERIFICATION: q > q_max (202.19 > 159.5)
+     - STATUS: CONGESTION DETECTED. Queue formation inevitable.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Queued Flow" (Norm 2, Formula 2)
+     - Clause I.11 Application (Dynamic Reduction):
+       * Total People (N_total) = 19
+       * Density Based Speed (v_d) = 17.50 m/min (at D=6.80)
+       * Time to Cross / Fill (t_fill) = ℓ / v_d = 0.1229 min
+       * Escaped People (N_out) = Q_gran * t_fill = 78.52 * 0.1229 = 9.65
+       * Effective People (N_eff) = max(0, N_total - N_out) = 9.35
+     - Formula: τ = ℓ / v_gran + N_eff * (1/Q_out - 1/Q_in)
+     - Term 1: Travel Time (l/v_gran) = 0.3272 min
+     - Term 2: Queue Delay = 0.0835 min
+     - Total Time (τ) = 0.4108 min
+  ---------------------------------------------------
+
+SEGMENT [11] -> [14]:
+  1. Geometry:
+     - Length (ℓ) = 2.15 m
+     - Width (δ)  = 1.20 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Incoming Flow from Upstream (Q_in = Σ Q_prev) = 202.72 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 168.93 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 159.5 p/m/min
+     - VERIFICATION: q > q_max (168.93 > 159.5)
+     - STATUS: CONGESTION DETECTED. Queue formation inevitable.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Queued Flow" (Norm 2, Formula 2)
+     - Clause I.11 Application (Dynamic Reduction):
+       * Total People (N_total) = 27
+       * Density Based Speed (v_d) = 6.57 m/min (at D=10.47)
+       * Time to Cross / Fill (t_fill) = ℓ / v_d = 0.3272 min
+       * Escaped People (N_out) = Q_gran * t_fill = 72.48 * 0.3272 = 23.72
+       * Effective People (N_eff) = max(0, N_total - N_out) = 3.28
+     - Formula: τ = ℓ / v_gran + N_eff * (1/Q_out - 1/Q_in)
+     - Term 1: Travel Time (l/v_gran) = 0.3272 min
+     - Term 2: Queue Delay = 0.0291 min
+     - Total Time (τ) = 0.3563 min
+  ---------------------------------------------------
+
+SEGMENT [14] -> [19]:
+  1. Geometry:
+     - Length (ℓ) = 2.15 m
+     - Width (δ)  = 1.30 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Incoming Flow from Upstream (Q_in = Σ Q_prev) = 196.68 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 151.29 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 159.5 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.0418 min
+  ---------------------------------------------------
+
+SEGMENT [19] -> [21]:
+  1. Geometry:
+     - Length (ℓ) = 2.15 m
+     - Width (δ)  = 1.20 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Incoming Flow from Upstream (Q_in = Σ Q_prev) = 261.12 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 217.60 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 159.5 p/m/min
+     - VERIFICATION: q > q_max (217.60 > 159.5)
+     - STATUS: CONGESTION DETECTED. Queue formation inevitable.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Queued Flow" (Norm 2, Formula 2)
+     - Clause I.11 Application (Dynamic Reduction):
+       * Total People (N_total) = 41
+       * Density Based Speed (v_d) = 6.57 m/min (at D=15.89)
+       * Time to Cross / Fill (t_fill) = ℓ / v_d = 0.3272 min
+       * Escaped People (N_out) = Q_gran * t_fill = 72.48 * 0.3272 = 23.72
+       * Effective People (N_eff) = max(0, N_total - N_out) = 17.28
+     - Formula: τ = ℓ / v_gran + N_eff * (1/Q_out - 1/Q_in)
+     - Term 1: Travel Time (l/v_gran) = 0.3272 min
+     - Term 2: Queue Delay = 0.1722 min
+     - Total Time (τ) = 0.4995 min
+  ---------------------------------------------------
+
+SEGMENT [21] -> [24]:
+  1. Geometry:
+     - Length (ℓ) = 2.15 m
+     - Width (δ)  = 1.20 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Incoming Flow from Upstream (Q_in = Σ Q_prev) = 136.92 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 114.10 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 159.5 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.0272 min
+  ---------------------------------------------------
+
+SEGMENT [24] -> [26]:
+  1. Geometry:
+     - Length (ℓ) = 2.15 m
+     - Width (δ)  = 1.20 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Incoming Flow from Upstream (Q_in = Σ Q_prev) = 201.36 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 167.80 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 159.5 p/m/min
+     - VERIFICATION: q > q_max (167.80 > 159.5)
+     - STATUS: CONGESTION DETECTED. Queue formation inevitable.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Queued Flow" (Norm 2, Formula 2)
+     - Clause I.11 Application (Dynamic Reduction):
+       * Total People (N_total) = 55
+       * Density Based Speed (v_d) = 6.57 m/min (at D=21.32)
+       * Time to Cross / Fill (t_fill) = ℓ / v_d = 0.3272 min
+       * Escaped People (N_out) = Q_gran * t_fill = 72.48 * 0.3272 = 23.72
+       * Effective People (N_eff) = max(0, N_total - N_out) = 31.28
+     - Formula: τ = ℓ / v_gran + N_eff * (1/Q_out - 1/Q_in)
+     - Term 1: Travel Time (l/v_gran) = 0.3272 min
+     - Term 2: Queue Delay = 0.2762 min
+     - Total Time (τ) = 0.6035 min
+  ---------------------------------------------------
+
+SEGMENT [26] -> [28]:
+  1. Geometry:
+     - Length (ℓ) = 3.00 m
+     - Width (δ)  = 1.20 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Incoming Flow from Upstream (Q_in = Σ Q_prev) = 136.92 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 114.10 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 159.5 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.0379 min
+  ---------------------------------------------------
+
+SEGMENT [28] -> [30]:
+  1. Geometry:
+     - Length (ℓ) = 2.00 m
+     - Width (δ)  = 1.70 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Incoming Flow from Upstream (Q_in = Σ Q_prev) = 204.91 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 120.54 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 159.5 p/m/min
+     - VERIFICATION: q <= q_max
+     - STATUS: NORMAL FLOW.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)
+     - Formula: τ = ℓ / v
+     - Time (τ) = 0.0296 min
+  ---------------------------------------------------
+
+SEGMENT [30] -> [2]:
+  1. Geometry:
+     - Length (ℓ) = 9.35 m
+     - Width (δ)  = 1.65 m
+  2. Flow Analysis (Specific Throughput Capacity):
+     - Incoming Flow from Upstream (Q_in = Σ Q_prev) = 307.21 p/min
+     - Specific Throughput Capacity (q = Q / δ) = 186.19 p/m/min
+  3. Bottleneck Verification (Queue Formulation):
+     - Max Permissible Specific Throughput (q_max) = 164.2 p/m/min
+     - VERIFICATION: q > q_max (186.19 > 164.2)
+     - STATUS: CONGESTION DETECTED. Queue formation inevitable.
+  4. Evacuation Time Calculation (τ):
+     - Methodology: "Time for Queued Flow" (Norm 2, Formula 2)
+     - Clause I.11 Application (Dynamic Reduction):
+       * Total People (N_total) = 75
+       * Density Based Speed (v_d) = 32.66 m/min (at D=4.86)
+       * Time to Cross / Fill (t_fill) = ℓ / v_d = 0.2863 min
+       * Escaped People (N_out) = Q_gran * t_fill = 222.75 * 0.2863 = 63.77
+       * Effective People (N_eff) = max(0, N_total - N_out) = 11.23
+     - Formula: τ = ℓ / v_gran + N_eff * (1/Q_out - 1/Q_in)
+     - Term 1: Travel Time (l/v_gran) = 0.6374 min
+     - Term 2: Queue Delay = 0.0139 min
+     - Total Time (τ) = 0.6512 min
+  ---------------------------------------------------
+
+FINAL RESULT: Total Evacuation Time = 2.80 min

@@ -175,8 +175,8 @@
 
     const limits = state.regulations.limits;
     let grp = limits.horizontal;
-    if (typeId === 'stairs_up') grp = limits.stairs_up;
-    else if (typeId === 'stairs_down') grp = limits.stairs_down;
+    if (typeId === 'stairs_up' || typeId === 'stair_up') grp = limits.stairs_up;
+    else if (typeId === 'stairs_down' || typeId === 'stair_down') grp = limits.stairs_down;
     else if (typeId && typeId.includes('door')) grp = limits.doors;
 
     return {
@@ -456,33 +456,51 @@
         // t = (L / v_gran) + N * (1/Q_out - 1/Q_in)
         // Note: For thin doors (thickness <= 0.7m), L is assumed 0 for the travel part.
 
-        const N = p.people || 0;
+        const N_total = p.people || 0;
         const Q_out = p.width * limits.q_gran;
-        const Q_in = Q_curr; // This is Q_in (calculated from sum of prev or ratio)
+        const Q_in = Q_curr;
 
-        // Travel Term
-        let travelTerm = 0;
+        // Norm 2 Clause I.11 Dynamic Reduction
+        // Instead of v_free (100 m/min), we use the actual speed based on density (D = N/A).
+        // This gives a more realistic "Time to Cross" for the population.
+
+        const area = p.length * p.width;
+        const density = area > 0 ? (p.people || 0) / area : 0;
+        const table = lookupTable11(p.type, density);
+        const v_density = table.v > 0.1 ? table.v : 100; // Fallback to 100 if v=0 (jammed? no, v=0 at high D)
+
+        let t_filling = 0;
         if (p.type.includes('door') && p.length <= 0.7) {
-          travelTerm = 0;
+          t_filling = 0;
         } else {
-          travelTerm = (limits.v_gran > 0.1) ? p.length / limits.v_gran : 0;
+          // Time to Cross for the group
+          t_filling = (p.length / v_density);
         }
+
+        const N_out = Q_out * t_filling;
+        const N_eff = Math.max(0, N_total - N_out);
+
+        // Store for report
+        conn.dynamicStats = { N_total, t_filling, N_out, N_eff, v_density, density };
+
+        // Travel Term (now t_filling)
+        let travelTerm = t_filling;
 
         // Delay Term
         let delayTerm = 0;
         if (Q_out > 0.1 && Q_in > 0.1) {
           // If Q_in > Q_out, we have a bottleneck delay
-          // The formula technically subtracts arrival rate. 
+          // The formula technically subtracts arrival rate.
           // t = L/v + N*(1/Q_out - 1/Q_in)
-          // If N is large, this term dominates. 
+          // If N is large, this term dominates.
           // If Q_in is very large (instant arrival), 1/Q_in -> 0.
           const val = (1 / Q_out) - (1 / Q_in);
-          // Ensure term is non-negative? 
+          // Ensure term is non-negative?
           // If Q_in < Q_out (no queue should form), but check logic says q > q_max.
-          // q > q_max implies Q_in/w > q_max. 
-          // Q_out = w * q_gran. 
+          // q > q_max implies Q_in/w > q_max.
+          // Q_out = w * q_gran.
           // Usually q_gran < q_max. So Q_in might be > Q_out.
-          delayTerm = N * Math.max(0, val);
+          delayTerm = N_eff * Math.max(0, val);
         } else if (Q_out > 0.1) {
           // Fallback if Q_in is 0? 
           delayTerm = N / Q_out;
@@ -2046,22 +2064,30 @@
 
         text += `  4. Evacuation Time Calculation (τ):\n`;
         if (fs.hasQueue) {
-          // Formula 2 (Norm 2)
-          const N = getSegmentParams(c).people || 0;
+          // Formula 2 (Norm 2) with I.11
+          const ds = c.dynamicStats || { N_total: 0, v_density: 0, density: 0, t_filling: 0, N_out: 0, N_eff: 0 };
           const Q_out = width * stats.q_gran;
           const Q_in = fs.Q_in || 0;
 
           text += `     - Methodology: "Time for Queued Flow" (Norm 2, Formula 2)\n`;
-          text += `     - Formula: τ = ℓ / v_gran + N * (1/Q_out - 1/Q_in)\n`;
+          text += `     - Clause I.11 Application (Dynamic Reduction):\n`;
+          text += `       * Total People (N_total) = ${ds.N_total}\n`;
+          text += `       * Density Based Speed (v_d) = ${ds.v_density.toFixed(2)} m/min (at D=${ds.density.toFixed(2)})\n`;
+          text += `       * Time to Cross / Fill (t_fill) = ℓ / v_d = ${ds.t_filling.toFixed(4)} min\n`;
+          text += `       * Escaped People (N_out) = Q_gran * t_fill = ${Q_out.toFixed(2)} * ${ds.t_filling.toFixed(4)} = ${ds.N_out.toFixed(2)}\n`;
+          text += `       * Effective People (N_eff) = max(0, N_total - N_out) = ${ds.N_eff.toFixed(2)}\n`;
+
+          text += `     - Formula: τ = ℓ / v_gran + N_eff * (1/Q_out - 1/Q_in)\n`;
           text += `       where Q_out = δ * q_gran = ${(Q_out).toFixed(2)} p/min\n`;
-          text += `     - Term 1: Travel Time (ℓ / v_gran)\n`;
+
+          text += `     - Term 1: Travel Time (l/v_gran)\n`;
           text += `       = ${c.typeId.includes('door') && c.distance <= 0.7 ? '0 (Thin Door Assumption)' : `${c.distance.toFixed(2)} / ${stats.v_gran || 10} = ${(c.distance / (stats.v_gran || 10)).toFixed(4)}`} min\n`;
 
           const val = (1 / Q_out) - (1 / Q_in);
-          const delay = N * Math.max(0, val);
+          const delay = ds.N_eff * Math.max(0, val);
 
-          text += `     - Term 2: Queue Delay (N * [1/Q_out - 1/Q_in])\n`;
-          text += `       = ${N} * [1/${Q_out.toFixed(2)} - 1/${Q_in.toFixed(2)}] = ${delay.toFixed(4)} min\n`;
+          text += `     - Term 2: Queue Delay (N_eff * [1/Q_out - 1/Q_in])\n`;
+          text += `       = ${ds.N_eff.toFixed(2)} * [1/${Q_out.toFixed(2)} - 1/${Q_in.toFixed(2)}] = ${delay.toFixed(4)} min\n`;
           text += `     - Total Time (τ) = ${(stats.time).toFixed(4)} min\n`;
         } else {
           // Formula 1
