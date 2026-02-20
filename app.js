@@ -15,6 +15,23 @@
   const ALLOWED_CONN_TYPE_IDS = new Set(DEFAULT_CONN_TYPES.map(t => t.id));
   const SALAMANDER_VERSION = '1.0.0';
   const SETTINGS_STORAGE_KEY = 'salamander.settings.v1';
+  const I18N_DEFAULT_LANG = 'en';
+  const I18N_DICT = (window.SALAMANDER_I18N && typeof window.SALAMANDER_I18N === 'object')
+    ? window.SALAMANDER_I18N
+    : { en: {}, bg: {} };
+  const BUILTIN_NODE_TYPE_I18N_KEY = {
+    start: 'nodeType.start',
+    start2: 'nodeType.start2',
+    exit: 'nodeType.exit',
+    normal: 'nodeType.normal',
+    waypoint: 'nodeType.waypoint',
+    door: 'nodeType.door',
+  };
+  const BUILTIN_CONN_TYPE_I18N_KEY = {
+    normal: 'connType.normal',
+    stairs_up: 'connType.stairs_up',
+    stairs_down: 'connType.stairs_down',
+  };
 
   // ─── Data Model ───────────────────────────────────────────
   const state = {
@@ -49,7 +66,9 @@
   let appSettings = {
     defaultAuthor: '',
     defaultCompany: '',
+    language: I18N_DEFAULT_LANG,
   };
+  let currentLanguage = I18N_DEFAULT_LANG;
 
   // Editor State
   let tool = 'select'; // select, addNode, addDoor, connect, delete
@@ -95,6 +114,8 @@
   const canvasHint = document.getElementById('canvas-hint');
   const btnZoomFit = document.getElementById('btnZoomFit');
   const zoomLevelDisplay = document.getElementById('zoomLevel');
+  const languageSelect = document.getElementById('languageSelect');
+  const metaDescription = document.getElementById('metaDescription');
   const btnMetadata = document.getElementById('btnMetadata');
   const btnSettings = document.getElementById('btnSettings');
   const btnOrderGraph = document.getElementById('btnOrderGraph');
@@ -148,6 +169,12 @@
     });
   });
 
+  if (languageSelect) {
+    languageSelect.addEventListener('change', (e) => {
+      setLanguage(e.target.value, { persist: true, applyDynamic: true });
+    });
+  }
+
   // ... (Keep splitConnection, createConnection updates below)
 
 
@@ -161,6 +188,53 @@
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
   const roundDistanceMeters = (m) => Math.round(m * 20) / 20; // 0.05m precision
   const roundWidthMeters = (m) => Math.round(m * 20) / 20; // 0.05m precision
+
+  function getActiveI18nBucket() {
+    return I18N_DICT[currentLanguage] || I18N_DICT[I18N_DEFAULT_LANG] || {};
+  }
+
+  function t(key, params = null, fallback = '') {
+    const active = getActiveI18nBucket();
+    const base = I18N_DICT[I18N_DEFAULT_LANG] || {};
+    const raw = Object.prototype.hasOwnProperty.call(active, key)
+      ? active[key]
+      : (Object.prototype.hasOwnProperty.call(base, key) ? base[key] : (fallback || key));
+    if (!params || typeof raw !== 'string') return raw;
+    return raw.replace(/\{(\w+)\}/g, (_, name) => (
+      Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : `{${name}}`
+    ));
+  }
+
+  function getNodeTypeDisplayName(typeId, fallbackName = '') {
+    const key = BUILTIN_NODE_TYPE_I18N_KEY[typeId];
+    if (key) return t(key, null, fallbackName || typeId);
+    return fallbackName || typeId || '';
+  }
+
+  function getConnTypeDisplayName(typeId, fallbackName = '') {
+    const key = BUILTIN_CONN_TYPE_I18N_KEY[typeId];
+    if (key) return t(key, null, fallbackName || typeId);
+    return fallbackName || typeId || '';
+  }
+
+  function getMethodLabel(methodId, longForm = false) {
+    const method = methodId === 'B' ? 'B' : 'A';
+    if (longForm) {
+      return method === 'B'
+        ? t('method.long.b', null, 'Method B - Specific flow capacity of route segments')
+        : t('method.long.a', null, 'Method A - Length of evacuation route');
+    }
+    return method === 'B'
+      ? t('method.short.b', null, 'Method B')
+      : t('method.short.a', null, 'Method A');
+  }
+
+  function getLocalizedItemWord(count) {
+    if (currentLanguage === 'bg') {
+      return count === 1 ? t('common.item', null, 'елемент') : t('common.items', null, 'елемента');
+    }
+    return count === 1 ? t('common.item', null, 'item') : t('common.items', null, 'items');
+  }
 
   function getNodeRadiusPx(zoom = cam.zoom) {
     const scaled = NODE_RADIUS * Math.pow(Math.max(zoom, 0.01), NODE_ZOOM_CURVE);
@@ -275,6 +349,10 @@
       const data = JSON.parse(raw);
       appSettings.defaultAuthor = String(data.defaultAuthor || '');
       appSettings.defaultCompany = String(data.defaultCompany || '');
+      const storedLang = String(data.language || I18N_DEFAULT_LANG).toLowerCase();
+      appSettings.language = Object.prototype.hasOwnProperty.call(I18N_DICT, storedLang)
+        ? storedLang
+        : I18N_DEFAULT_LANG;
     } catch (err) {
       console.warn('Settings load from localStorage failed:', err);
     }
@@ -284,6 +362,7 @@
     const payload = {
       defaultAuthor: appSettings.defaultAuthor || '',
       defaultCompany: appSettings.defaultCompany || '',
+      language: appSettings.language || I18N_DEFAULT_LANG,
     };
     try {
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
@@ -291,6 +370,52 @@
     } catch (err) {
       console.warn('Settings save to localStorage failed:', err);
       return false;
+    }
+  }
+
+  function applyStaticTranslations() {
+    document.documentElement.lang = currentLanguage;
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+      const key = el.getAttribute('data-i18n');
+      if (!key) return;
+      el.textContent = t(key, null, el.textContent || '');
+    });
+    document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+      const key = el.getAttribute('data-i18n-title');
+      if (!key) return;
+      el.setAttribute('title', t(key, null, el.getAttribute('title') || ''));
+    });
+    if (metaDescription) {
+      metaDescription.setAttribute('content', t('document.description', null, metaDescription.getAttribute('content') || ''));
+    }
+    document.title = t('document.title', null, document.title || 'Salamander');
+    if (languageSelect) {
+      languageSelect.value = currentLanguage;
+    }
+  }
+
+  function applyLanguageToDynamicUi() {
+    renderLegend();
+    updatePropertiesPanel();
+    renderTable();
+    if (reportModal && reportModal.style.display === 'flex') {
+      showReport(false);
+    } else {
+      render();
+    }
+  }
+
+  function setLanguage(lang, options = {}) {
+    const { persist = true, applyDynamic = true } = options;
+    const supported = Object.prototype.hasOwnProperty.call(I18N_DICT, lang) ? lang : I18N_DEFAULT_LANG;
+    currentLanguage = supported;
+    appSettings.language = supported;
+    applyStaticTranslations();
+    if (persist) {
+      saveSettingsToStorage();
+    }
+    if (applyDynamic) {
+      applyLanguageToDynamicUi();
     }
   }
 
@@ -1039,11 +1164,11 @@
     const pinnedCount = state.nodes.reduce((sum, n) => sum + (n.pinned ? 1 : 0), 0);
     const exits = state.nodes.filter(n => n.typeId === 'exit');
     const criticalExits = exits.filter(n => Math.abs((Number(n.maxTime) || 0) - (Number(state.totalEvacuationTime) || 0)) < 0.01).length;
-    const modeLabel = tool === 'addNode' ? 'Add Node' :
-      tool === 'addDoor' ? 'Add Door' :
-        tool === 'connect' ? 'Connect' :
-          tool === 'delete' ? 'Delete' : 'Select';
-    const methodLabel = state.calculationMethod === 'B' ? 'Method B' : 'Method A';
+    const modeLabel = tool === 'addNode' ? t('tool.addNode', null, 'Add Node') :
+      tool === 'addDoor' ? t('tool.addDoor', null, 'Add Door') :
+        tool === 'connect' ? t('tool.connect', null, 'Connect') :
+          tool === 'delete' ? t('tool.delete', null, 'Delete') : t('tool.select', null, 'Select');
+    const methodLabel = getMethodLabel(state.calculationMethod, false);
 
     return {
       bounds,
@@ -1064,14 +1189,15 @@
 
   function drawCanvasInfoOverlay(w, h) {
     const info = getCanvasInsights();
-    const projectName = (state.metadata && state.metadata.project) ? state.metadata.project : 'Untitled';
+    const projectName = (state.metadata && state.metadata.project) ? state.metadata.project : t('common.untitled', null, 'Untitled');
+    const itemWord = getLocalizedItemWord(info.selectedCount);
     const lines = [
-      `Project: ${projectName} | Method: ${info.methodLabel}`,
-      `Mode: ${info.modeLabel} | Order Graph: ${orderGraphEnabled ? 'ON' : 'OFF'} | Zoom: ${Math.round(cam.zoom * 100)}%`,
-      `Nodes: ${state.nodes.length} (Start ${info.counts.start + info.counts.start2}, Exit ${info.counts.exit}, Door ${info.counts.door}, Waypoint ${info.counts.waypoint}, Pinned ${info.pinnedCount})`,
-      `Connections: ${info.connectionCount} | Bottlenecks: ${info.bottleneckCount} | Blocked: ${info.blockedCount} | Queues: ${info.queueCount}`,
-      `Total People: ${info.totalPeople} | Evac Time: ${info.totalTime.toFixed(3)} min | Critical Exits: ${info.criticalExits}`,
-      `Graph Size: ${info.bounds.widthM.toFixed(2)}m x ${info.bounds.heightM.toFixed(2)}m | Selection: ${info.selectedCount} item${info.selectedCount === 1 ? '' : 's'}`,
+      `${t('overlay.project', null, 'Project')}: ${projectName} | ${t('overlay.method', null, 'Method')}: ${info.methodLabel}`,
+      `${t('overlay.mode', null, 'Mode')}: ${info.modeLabel} | ${t('overlay.orderGraph', null, 'Order Graph')}: ${orderGraphEnabled ? t('common.on', null, 'ON') : t('common.off', null, 'OFF')} | ${t('overlay.zoom', null, 'Zoom')}: ${Math.round(cam.zoom * 100)}%`,
+      `${t('overlay.nodes', null, 'Nodes')}: ${state.nodes.length} (${t('overlay.start', null, 'Start')} ${info.counts.start + info.counts.start2}, ${t('overlay.exit', null, 'Exit')} ${info.counts.exit}, ${t('overlay.door', null, 'Door')} ${info.counts.door}, ${t('overlay.waypoint', null, 'Waypoint')} ${info.counts.waypoint}, ${t('overlay.pinned', null, 'Pinned')} ${info.pinnedCount})`,
+      `${t('overlay.connections', null, 'Connections')}: ${info.connectionCount} | ${t('overlay.bottlenecks', null, 'Bottlenecks')}: ${info.bottleneckCount} | ${t('overlay.blocked', null, 'Blocked')}: ${info.blockedCount} | ${t('overlay.queues', null, 'Queues')}: ${info.queueCount}`,
+      `${t('overlay.totalPeople', null, 'Total People')}: ${info.totalPeople} | ${t('overlay.totalTime', null, 'Evac Time')}: ${info.totalTime.toFixed(3)} min | ${t('overlay.criticalExits', null, 'Critical Exits')}: ${info.criticalExits}`,
+      `${t('overlay.graphSize', null, 'Graph Size')}: ${info.bounds.widthM.toFixed(2)}m x ${info.bounds.heightM.toFixed(2)}m | ${t('overlay.selection', null, 'Selection')}: ${info.selectedCount} ${itemWord}`,
     ];
 
     ctx.save();
@@ -1103,17 +1229,17 @@
   function drawMetadataOverlay(w, h) {
     const meta = state.metadata || {};
     const lines = [];
-    lines.push(`Project: ${meta.project || 'Untitled'}`);
-    lines.push(`Author: ${meta.author || '-'}`);
-    lines.push(`Company: ${meta.company || '-'}`);
-    lines.push(`Date: ${meta.dateTime || '-'}`);
-    lines.push(`Created: ${meta.createdAt || '-'}`);
-    lines.push(`Exported: ${meta.exportedAt || '-'}`);
-    lines.push(`Version: ${meta.salamanderVersion || SALAMANDER_VERSION}`);
+    lines.push(`${t('metaOverlay.project', null, 'Project')}: ${meta.project || t('common.untitled', null, 'Untitled')}`);
+    lines.push(`${t('metaOverlay.author', null, 'Author')}: ${meta.author || '-'}`);
+    lines.push(`${t('metaOverlay.company', null, 'Company')}: ${meta.company || '-'}`);
+    lines.push(`${t('metaOverlay.date', null, 'Date')}: ${formatDateTimeForDisplay(meta.dateTime)}`);
+    lines.push(`${t('metaOverlay.created', null, 'Created')}: ${formatDateTimeForDisplay(meta.createdAt)}`);
+    lines.push(`${t('metaOverlay.exported', null, 'Exported')}: ${formatDateTimeForDisplay(meta.exportedAt)}`);
+    lines.push(`${t('metaOverlay.version', null, 'Version')}: ${meta.salamanderVersion || SALAMANDER_VERSION}`);
     if (meta.notes) {
       const compact = meta.notes.replace(/\s+/g, ' ').trim();
       const clipped = compact.length > 90 ? `${compact.slice(0, 87)}...` : compact;
-      lines.push(`Notes: ${clipped}`);
+      lines.push(`${t('metaOverlay.notes', null, 'Notes')}: ${clipped}`);
     }
 
     ctx.save();
@@ -1298,7 +1424,7 @@
     }
 
     // Label
-    const label = node.name || `Node ${node.id}`;
+    const label = node.name || `${t('table.nodes.id', null, 'ID')} ${node.id}`;
     const labelFontPx = Math.max(10, Math.min(16, 10 + r * 0.2));
     ctx.font = `${labelFontPx}px Inter, sans-serif`;
     ctx.fillStyle = var_textPrimary;
@@ -1310,7 +1436,7 @@
     const badgeFontPx = Math.max(8, Math.min(13, 8 + r * 0.18));
     ctx.font = `${badgeFontPx}px Inter, sans-serif`;
     ctx.fillStyle = nt.color;
-    ctx.fillText(nt.name, s.x, s.y + r + 6 + Math.max(12, labelFontPx + 2));
+    ctx.fillText(getNodeTypeDisplayName(node.typeId, nt.name), s.x, s.y + r + 6 + Math.max(12, labelFontPx + 2));
 
     if (node.pinned) {
       const px = s.x + r * 0.62;
@@ -2463,7 +2589,7 @@
     for (const n of state.nodes) {
       const isSel = selectedItems.has(`node:${n.id}`);
       const type = state.nodeTypes.find(t => t.id === n.typeId);
-      const typeName = type ? type.name : n.typeId;
+      const typeName = getNodeTypeDisplayName(n.typeId, type ? type.name : n.typeId);
       nHtml += `<tr class="${isSel ? 'selected' : ''}" onclick="window.selectNode(${n.id})">
         <td>${n.id}</td>
         <td>${escHtml(n.name)}</td>
@@ -2481,7 +2607,7 @@
     for (const c of state.connections) {
       const isSel = selectedItems.has(`connection:${c.id}`);
       const cType = state.connTypes.find(t => t.id === c.typeId);
-      const cTypeName = cType ? cType.name : c.typeId;
+      const cTypeName = getConnTypeDisplayName(c.typeId, cType ? cType.name : c.typeId);
 
       const stats = c.calcStats || { density: 0, v: 0, q: 0, Q: 0, time: 0 };
       const width = c.width || 1.2;
@@ -2501,7 +2627,7 @@
         <td>${(stats.Q || 0).toFixed(2)}</td>
         <td>${(stats.v || 0).toFixed(2)}</td>
         <td>${timeStr}</td>
-        <td>${c.congestion || 'none'}</td>
+        <td>${connectionSeverityLabel(c.congestion === 'blocked' ? 'blocked' : 'none')}</td>
       </tr>`;
     }
     connectionsTableBody.innerHTML = cHtml;
@@ -2583,17 +2709,17 @@
     let csvContent = "data:text/csv;charset=utf-8,";
 
     if (isNodes) {
-      csvContent += "ID,Name,Type,People,MaxTime,X,Y\n";
+      csvContent += `ID,${t('table.nodes.name', null, 'Name')},${t('table.nodes.type', null, 'Type')},${t('table.nodes.people', null, 'People')},${t('table.nodes.maxTime', null, 'Max Time (min)')},X,Y\n`;
       state.nodes.forEach(n => {
         const type = state.nodeTypes.find(t => t.id === n.typeId);
-        const tName = type ? type.name : n.typeId;
+        const tName = getNodeTypeDisplayName(n.typeId, type ? type.name : n.typeId);
         csvContent += `${n.id},"${n.name}","${tName}",${n.people || 0},${(n.maxTime || 0).toFixed(2)},${n.x},${n.y}\n`;
       });
     } else {
-      csvContent += "ID,Source,Target,Type,Width,Area,Distance,Density,SpFlow,Capacity,Speed,Time,Congestion\n";
+      csvContent += `ID,${t('table.connections.source', null, 'Source')},${t('table.connections.target', null, 'Target')},${t('table.connections.type', null, 'Type')},${t('table.connections.width', null, 'Width (m)')},${t('table.connections.area', null, 'Area (m2)')},${t('table.connections.distance', null, 'Dist (m)')},${t('table.connections.density', null, 'Density')},${t('table.connections.q', null, 'Sp. Flow (q)')},${t('table.connections.Q', null, 'Cap. (Q)')},${t('table.connections.speed', null, 'Speed')},${t('table.connections.time', null, 'Time')},${t('table.connections.congestion', null, 'Congestion')}\n`;
       state.connections.forEach(c => {
         const type = state.connTypes.find(t => t.id === c.typeId);
-        const tName = type ? type.name : c.typeId;
+        const tName = getConnTypeDisplayName(c.typeId, type ? type.name : c.typeId);
         const stats = c.calcStats || { density: 0, v: 0, q: 0, Q: 0, time: 0 };
         const width = c.width || 1.2;
         const area = width * c.distance;
@@ -2722,7 +2848,7 @@
         if (hitNode) {
           setTool('connect');
           connectSource = hitNode.id;
-          showHint('Connect mode: click the next node or a segment');
+          showHint(t('hint.connectMode', null, 'Connect mode: click the next node or a segment'));
           render();
           break;
         }
@@ -3043,7 +3169,7 @@
   // ─── Toolbar Actions ─────────────────────────────────────
   document.getElementById('btnClearAll').addEventListener('click', () => {
     if (state.nodes.length === 0 && state.connections.length === 0) return;
-    if (!confirm('Clear all nodes and connections?')) return;
+    if (!confirm(t('confirm.clearAll', null, 'Clear all nodes and connections?'))) return;
     state.nodes = [];
     state.connections = [];
     state.nextNodeId = 1;
@@ -3110,7 +3236,7 @@
         closeSettingsModal();
         render();
       } else {
-        alert('Failed to save settings in this browser.');
+        alert(t('alert.settingsSaveFailed', null, 'Failed to save settings in this browser.'));
       }
     });
   }
@@ -3202,7 +3328,7 @@
           commitHistory();
           render();
         } catch (err) {
-          alert('Failed to import: ' + err.message);
+          alert(t('alert.importFailed', { message: err.message }, `Failed to import: ${err.message}`));
         }
       };
       reader.readAsText(file);
@@ -3226,6 +3352,7 @@
       .catch(err => console.error('Failed to load regulations:', err));
 
     loadSettingsFromStorage();
+    setLanguage(appSettings.language || I18N_DEFAULT_LANG, { persist: false, applyDynamic: false });
     state.metadata = normalizeMetadata(state.metadata);
     applySettingsDefaultsToMetadata();
     normalizeConnectionTypes();
@@ -3322,10 +3449,10 @@
   }
 
   function connectionSeverityLabel(severity) {
-    if (severity === 'n_a') return 'N/A';
-    if (severity === 'queued') return 'Queue';
-    if (severity === 'blocked') return 'Blocked';
-    return 'None';
+    if (severity === 'n_a') return t('severity.na', null, 'N/A');
+    if (severity === 'queued') return t('severity.queued', null, 'Queue');
+    if (severity === 'blocked') return t('severity.blocked', null, 'Blocked');
+    return t('severity.none', null, 'No blockage');
   }
 
   function getConnectionSeverity(conn, method, flowState = conn.flowState || {}) {
@@ -3441,9 +3568,9 @@
         conn,
         src,
         tgt,
-        fromName: src.name || `Node ${src.id}`,
-        toName: tgt.name || `Node ${tgt.id}`,
-        typeName: ct.name || conn.typeId || 'normal',
+        fromName: src.name || `${t('table.nodes.id', null, 'ID')} ${src.id}`,
+        toName: tgt.name || `${t('table.nodes.id', null, 'ID')} ${tgt.id}`,
+        typeName: getConnTypeDisplayName(conn.typeId, ct.name || conn.typeId || 'normal'),
         typeColor: ct.color || '#8b949e',
         typeDash: Array.isArray(ct.dash) ? ct.dash : [],
         direction: conn.direction || 'forward',
@@ -3488,9 +3615,7 @@
       : null;
 
     const graphSizeLabel = `${formatNumeric(bounds.widthM, 2, '0.00')} m x ${formatNumeric(bounds.heightM, 2, '0.00')} m`;
-    const methodLabel = state.calculationMethod === 'B'
-      ? 'Method B - Capacity/Throughput'
-      : 'Method A - Travel Speed';
+    const methodLabel = getMethodLabel(method, true);
 
     return {
       generatedAtRaw,
@@ -3545,49 +3670,85 @@
     if (repGeneratedAt) repGeneratedAt.textContent = report.generatedAtDisplay;
 
     const longest = report.maxTimeRow
-      ? `Connection #${report.maxTimeRow.connId} (${report.maxTimeRow.fromName} -> ${report.maxTimeRow.toName}) at ${formatNumeric(report.maxTimeRow.time, 3, '0.000')} min`
-      : 'No segment data is available yet.';
+      ? t(
+        'report.summary.longest',
+        {
+          id: report.maxTimeRow.connId,
+          from: report.maxTimeRow.fromName,
+          to: report.maxTimeRow.toName,
+          time: formatNumeric(report.maxTimeRow.time, 3, '0.000'),
+        },
+        `Connection #${report.maxTimeRow.connId} (${report.maxTimeRow.fromName} -> ${report.maxTimeRow.toName}) at ${formatNumeric(report.maxTimeRow.time, 3, '0.000')} min`
+      )
+      : t('report.summary.longest.none', null, 'No segment data is available yet.');
 
     const riskLine = report.bottleneckCount > 0
-      ? `${report.bottleneckCount} bottleneck segments were found (${report.blockedCount} blocked, ${report.queueCount} with queues).`
-      : 'No bottlenecks or blocked segments were detected.';
+      ? t(
+        'report.summary.riskSome',
+        { count: report.bottleneckCount, blocked: report.blockedCount, queues: report.queueCount },
+        `${report.bottleneckCount} bottleneck segments were found (${report.blockedCount} blocked, ${report.queueCount} with queues).`
+      )
+      : t('report.summary.riskNone', null, 'No bottlenecks or blocked segments were detected.');
     const densityLine = (report.method === 'A' && report.maxDensityRow)
-      ? `Connection #${report.maxDensityRow.connId} has the highest density at ${formatNumeric(report.maxDensityRow.density, 2)} p/m2.`
+      ? t(
+        'report.summary.density',
+        { id: report.maxDensityRow.connId, value: formatNumeric(report.maxDensityRow.density, 2) },
+        `Connection #${report.maxDensityRow.connId} has the highest density at ${formatNumeric(report.maxDensityRow.density, 2)} p/m2.`
+      )
       : '';
     const lengthWarningLine = report.lengthMismatchCount > 0
-      ? `${report.lengthMismatchCount} connections deviate from user-specified length and are currently highlighted as warnings.`
+      ? t(
+        'report.summary.lengthWarnings',
+        { count: report.lengthMismatchCount },
+        `${report.lengthMismatchCount} connections deviate from user-specified length and are currently highlighted as warnings.`
+      )
       : '';
+    const outcomeLine = t(
+      'report.summary.outcome',
+      {
+        time: formatNumeric(report.totalTime, 3, '0.000'),
+        people: Math.round(report.totalPeople),
+        method: report.methodLabel,
+      },
+      `Total evacuation time is ${formatNumeric(report.totalTime, 3, '0.000')} min for ${Math.round(report.totalPeople)} people using ${report.methodLabel}.`
+    );
+    const geometryLine = t(
+      'report.summary.geometry',
+      { size: report.graphSizeLabel, connections: report.rows.length, longest },
+      `The graph covers ${report.graphSizeLabel} with ${report.rows.length} modeled connections. Longest segment: ${longest}.`
+    );
 
     if (reportExecutiveSummary) {
       reportExecutiveSummary.innerHTML = [
-        `<p><strong>Outcome:</strong> Total evacuation time is <strong>${formatNumeric(report.totalTime, 3, '0.000')} min</strong> for <strong>${Math.round(report.totalPeople)}</strong> people using <strong>${escHtml(report.methodLabel)}</strong>.</p>`,
-        `<p><strong>Risk Profile:</strong> ${escHtml(riskLine)}</p>`,
-        densityLine ? `<p><strong>Density:</strong> ${escHtml(densityLine)}</p>` : '',
-        lengthWarningLine ? `<p><strong>Length Warning:</strong> ${escHtml(lengthWarningLine)}</p>` : '',
-        `<p><strong>Geometry:</strong> The graph covers <strong>${escHtml(report.graphSizeLabel)}</strong> with ${report.rows.length} modeled connections. Longest segment time contribution: ${escHtml(longest)}.</p>`,
+        `<p>${escHtml(outcomeLine)}</p>`,
+        `<p>${escHtml(riskLine)}</p>`,
+        densityLine ? `<p>${escHtml(densityLine)}</p>` : '',
+        lengthWarningLine ? `<p>${escHtml(lengthWarningLine)}</p>` : '',
+        `<p>${escHtml(geometryLine)}</p>`,
       ].filter(Boolean).join('');
     }
 
     if (reportMetaGrid) {
       const meta = report.metadata || {};
+      const nodesSummary = `${state.nodes.length} (${getNodeTypeDisplayName('start', 'Start')} ${report.nodeCounts.start + report.nodeCounts.start2}, ${getNodeTypeDisplayName('exit', 'Exit')} ${report.nodeCounts.exit}, ${getNodeTypeDisplayName('door', 'Door')} ${report.nodeCounts.door}, ${getNodeTypeDisplayName('waypoint', 'Waypoint')} ${report.nodeCounts.waypoint})`;
       const metaItems = [
-        ['Project', meta.project || 'Untitled'],
-        ['Author', meta.author || '-'],
-        ['Company', meta.company || '-'],
-        ['Scenario Date/Time', formatDateTimeForDisplay(meta.dateTime)],
-        ['Created', formatDateTimeForDisplay(meta.createdAt)],
-        ['Exported', formatDateTimeForDisplay(meta.exportedAt)],
-        ['Salamander Version', meta.salamanderVersion || SALAMANDER_VERSION],
-        ['Nodes', `${state.nodes.length} (Start ${report.nodeCounts.start + report.nodeCounts.start2}, Exit ${report.nodeCounts.exit}, Door ${report.nodeCounts.door}, Waypoint ${report.nodeCounts.waypoint})`],
-        ['Pinned Nodes', String(report.nodeCounts.pinned)],
-        ['Total Connection Length', `${formatNumeric(report.totalLength, 2, '0.00')} m`],
-        ['Average Width', `${formatNumeric(report.avgWidth, 2, '0.00')} m`],
-        ['Average Speed', `${formatNumeric(report.avgSpeed, 2, '0.00')} m/min`],
-        ['Length Mismatch Warnings', String(report.lengthMismatchCount)],
-        ['Ordering', report.orderGraphEnabled ? 'Enabled' : 'Disabled'],
+        [t('report.meta.project', null, 'Project'), meta.project || t('common.untitled', null, 'Untitled')],
+        [t('report.meta.author', null, 'Author'), meta.author || '-'],
+        [t('report.meta.company', null, 'Company'), meta.company || '-'],
+        [t('report.meta.scenarioDate', null, 'Scenario Date/Time'), formatDateTimeForDisplay(meta.dateTime)],
+        [t('report.meta.created', null, 'Created'), formatDateTimeForDisplay(meta.createdAt)],
+        [t('report.meta.exported', null, 'Exported'), formatDateTimeForDisplay(meta.exportedAt)],
+        [t('report.meta.version', null, 'Salamander Version'), meta.salamanderVersion || SALAMANDER_VERSION],
+        [t('report.meta.nodes', null, 'Nodes'), nodesSummary],
+        [t('report.meta.pinned', null, 'Pinned Nodes'), String(report.nodeCounts.pinned)],
+        [t('report.meta.totalLength', null, 'Total Connection Length'), `${formatNumeric(report.totalLength, 2, '0.00')} m`],
+        [t('report.meta.avgWidth', null, 'Average Width'), `${formatNumeric(report.avgWidth, 2, '0.00')} m`],
+        [t('report.meta.avgSpeed', null, 'Average Speed'), `${formatNumeric(report.avgSpeed, 2, '0.00')} m/min`],
+        [t('report.meta.lengthWarnings', null, 'Length Mismatch Warnings'), String(report.lengthMismatchCount)],
+        [t('report.meta.ordering', null, 'Ordering'), report.orderGraphEnabled ? t('common.enabled', null, 'Enabled') : t('common.disabled', null, 'Disabled')],
       ];
       if (report.method === 'A') {
-        metaItems.splice(11, 0, ['Average Density', `${formatNumeric(report.avgDensity, 2, '0.00')} p/m2`]);
+        metaItems.splice(11, 0, [t('report.meta.avgDensity', null, 'Average Density'), `${formatNumeric(report.avgDensity, 2, '0.00')} p/m2`]);
       }
 
       reportMetaGrid.innerHTML = metaItems.map(([label, value]) => `
@@ -3633,7 +3794,7 @@
       repCtx.font = '600 14px Inter, sans-serif';
       repCtx.textAlign = 'center';
       repCtx.textBaseline = 'middle';
-      repCtx.fillText('No graph data to render', cssW / 2, cssH / 2);
+      repCtx.fillText(t('alert.noGraphData', null, 'No graph data to render'), cssW / 2, cssH / 2);
       return;
     }
 
@@ -3883,7 +4044,7 @@
       repCtx.fillStyle = isLight ? '#1f2937' : '#d1d5db';
       repCtx.textAlign = 'center';
       repCtx.textBaseline = 'top';
-      repCtx.fillText(node.name || `Node ${node.id}`, p.x, p.y + nodeRadius + 3);
+      repCtx.fillText(node.name || `${t('table.nodes.id', null, 'ID')} ${node.id}`, p.x, p.y + nodeRadius + 3);
       repCtx.restore();
     });
 
@@ -3924,31 +4085,31 @@
     const showLengthWarnings = !!(report && report.lengthMismatchCount > 0);
 
     const cols = [
-      { key: 'step', label: 'Step', align: 'center' },
-      { key: 'conn', label: 'Conn', align: 'center' },
-      { key: 'from', label: 'From', align: 'left' },
-      { key: 'to', label: 'To', align: 'left' },
-      { key: 'type', label: 'Type', align: 'left' },
-      { key: 'dir', label: 'Dir', align: 'center' },
-      { key: 'length', label: 'Length (m)', align: 'right' },
-      { key: 'width', label: 'Width (m)', align: 'right' },
-      { key: 'people', label: 'People In', align: 'right' },
+      { key: 'step', label: t('report.table.step', null, 'Step'), align: 'center' },
+      { key: 'conn', label: t('report.table.conn', null, 'Conn'), align: 'center' },
+      { key: 'from', label: t('report.table.from', null, 'From'), align: 'left' },
+      { key: 'to', label: t('report.table.to', null, 'To'), align: 'left' },
+      { key: 'type', label: t('report.table.type', null, 'Type'), align: 'left' },
+      { key: 'dir', label: t('report.table.dir', null, 'Dir'), align: 'center' },
+      { key: 'length', label: t('report.table.length', null, 'Length (m)'), align: 'right' },
+      { key: 'width', label: t('report.table.width', null, 'Width (m)'), align: 'right' },
+      { key: 'people', label: t('report.table.people', null, 'People In'), align: 'right' },
     ];
 
     if (showDensity) {
-      cols.push({ key: 'density', label: 'Density', align: 'right' });
+      cols.push({ key: 'density', label: t('report.table.density', null, 'Density'), align: 'right' });
     }
     if (showFlow) {
-      cols.push({ key: 'q', label: 'q', align: 'right' });
-      cols.push({ key: 'Q', label: 'Q', align: 'right' });
+      cols.push({ key: 'q', label: t('report.table.q', null, 'q'), align: 'right' });
+      cols.push({ key: 'Q', label: t('report.table.Q', null, 'Q'), align: 'right' });
     }
 
-    cols.push({ key: 'speed', label: 'Speed', align: 'right' });
-    cols.push({ key: 'time', label: 'Time (min)', align: 'right' });
+    cols.push({ key: 'speed', label: t('report.table.speed', null, 'Speed'), align: 'right' });
+    cols.push({ key: 'time', label: t('report.table.time', null, 'Time (min)'), align: 'right' });
     if (showLengthWarnings) {
-      cols.push({ key: 'lengthWarning', label: 'Length Warning', align: 'left' });
+      cols.push({ key: 'lengthWarning', label: t('report.table.lengthWarning', null, 'Length Warning'), align: 'left' });
     }
-    cols.push({ key: 'congestion', label: 'Congestion', align: 'center' });
+    cols.push({ key: 'congestion', label: t('report.table.congestion', null, 'Congestion'), align: 'center' });
     return cols;
   }
 
@@ -3976,7 +4137,11 @@
     if (key === 'time') return timeText;
     if (key === 'lengthWarning') {
       if (!row.lengthMismatch) return '-';
-      return `Specified ${formatNumeric(row.specifiedLength, 2)} m, using ${formatNumeric(row.length, 2)} m`;
+      return t(
+        'report.table.lengthWarningValue',
+        { specified: formatNumeric(row.specifiedLength, 2), actual: formatNumeric(row.length, 2) },
+        `Specified ${formatNumeric(row.specifiedLength, 2)} m, using ${formatNumeric(row.length, 2)} m`
+      );
     }
     if (key === 'congestion') return row.severityLabel;
     return '';
@@ -4003,7 +4168,7 @@
     }
 
     if (!report || report.rows.length === 0) {
-      reportTableBody.innerHTML = `<tr><td colspan="${columns.length}">No connection data available.</td></tr>`;
+      reportTableBody.innerHTML = `<tr><td colspan="${columns.length}">${escHtml(t('alert.noConnectionData', null, 'No connection data available.'))}</td></tr>`;
       return;
     }
 
@@ -4017,94 +4182,107 @@
   function generateMathProof(report = lastReportContext) {
     if (!mathProofContent) return;
     if (!report) {
-      mathProofContent.textContent = 'No report data available.';
+      mathProofContent.textContent = t('alert.noReportData', null, 'No report data available.');
       return;
     }
+    const headerHtml = `
+      <div class="proof-head">
+        <p><strong>${escHtml(t('proof.title', null, 'Detailed Mathematical Verification (Normative Structure)'))}</strong></p>
+        <p>${escHtml(t('report.stat.generated', null, 'Generated'))}: ${escHtml(report.generatedAtDisplay)}</p>
+        <p>${escHtml(t('report.stat.method', null, 'Method'))}: ${escHtml(report.methodLabel)}</p>
+        <p>${escHtml(t('report.stat.totalPeople', null, 'Total People'))}: ${Math.round(report.totalPeople)} | ${escHtml(t('report.stat.totalTime', null, 'Total Evacuation Time'))}: ${formatNumeric(report.totalTime, 3, '0.000')} min</p>
+        <p>${escHtml(t('report.stat.connections', null, 'Connections'))}: ${report.rows.length} | ${escHtml(t('report.stat.bottlenecks', null, 'Bottlenecks'))}: ${report.bottleneckCount}</p>
+      </div>
+    `;
 
-    const lines = [];
-    lines.push('SALAMANDER EVACUATION REPORT - DETAILED MATHEMATICAL LOG');
-    lines.push(`Generated At: ${report.generatedAtDisplay}`);
-    lines.push(`Calculation Method: ${report.methodLabel}`);
-    lines.push(`Graph Size: ${report.graphSizeLabel}`);
-    lines.push(`Total People: ${Math.round(report.totalPeople)}`);
-    lines.push(`Total Evacuation Time: ${formatNumeric(report.totalTime, 3, '0.000')} min`);
-    lines.push(`Connections Reviewed: ${report.rows.length}`);
-    lines.push(`Bottlenecks: ${report.bottleneckCount} (blocked: ${report.blockedCount}, queued: ${report.queueCount})`);
-    if (report.lengthMismatchCount > 0) {
-      lines.push(`Length Warnings: ${report.lengthMismatchCount} connections deviate from user-specified length.`);
-    }
-    lines.push('');
-    lines.push('REGULATORY BASELINE');
-    lines.push('- Regulation Source: Ordinance Iz-1971, Annex 8a');
-    lines.push('- Flow and speed lookup: Table 11');
-    lines.push('- Segment geometry precision: length 0.05 m, width 0.05 m');
-    lines.push('- Total evacuation time precision: 0.001 min');
-    lines.push('');
-    lines.push('SEGMENT-BY-SEGMENT CALCULATION');
-    lines.push('----------------------------------------');
+    const regulatoryHtml = `
+      <h4>${escHtml(t('proof.regulatory', null, 'Regulatory Basis'))}</h4>
+      <ul>
+        <li>Наредба № Iз-1971, приложение № 8а/№ 9; чл. 58, чл. 63.</li>
+        <li>Таблица 11: скорост и СПС по плътност на потока.</li>
+        <li>Таблица 12: гранични параметри за врати/отвори до 1,6 m.</li>
+        <li>Точност на модела: дължина 0,05 m; широчина 0,05 m; общо време 0,001 min.</li>
+      </ul>
+      <div class="law-quote">„Чл. 63. (1) ... специфичната пропускателна способност (СПС) ... и скоростта ... се приемат съгласно табл. 11.“<div class="law-cite">Наредба № Iз-1971, чл. 63, ал. 1</div></div>
+      <div class="law-quote">„За стойности на Dai над граничните се приема граничната стойност на плътността на човешкия поток.“<div class="law-cite">Приложение 8а, раздел II, т. 3</div></div>
+    `;
 
-    if (report.rows.length === 0) {
-      lines.push('No segment rows were available. Add connected nodes and rerun the report.');
-    }
+    const algorithmHtml = report.method === 'B'
+      ? `
+        <h4>${escHtml(t('proof.algorithm', null, 'Algorithm by Applicable Method'))}</h4>
+        <p>${escHtml(t('proof.methodB.steps', null, 'Method III (specific flow capacity): compute q_i, compare with q_max, apply no-queue or queue branch, and sum all τ_i to final exit.'))}</p>
+        <div class="formula-block">${escHtml(t('proof.eq.methodB.flow', null, 'Q = q · δ'))}</div>
+        <div class="formula-block">${escHtml(t('proof.eq.methodB.q', null, 'q_i = (q_{i-1} · δ_{i-1}) / δ_i  (or merged-flow sum / δ_i)'))}</div>
+        <div class="formula-block">${escHtml(t('proof.eq.methodB.noQueue', null, 'if q_i ≤ q_max: τ_i = L_i / v_i'))}</div>
+        <div class="formula-block">${escHtml(t('proof.eq.methodB.queue', null, 'if q_i > q_max: τ_i = L_i / v_gran + N_eff · (1/Q_out - 1/Q_in)'))}</div>
+        <div class="law-quote">„След всяко получаване на текущата специфична пропускателна способност qi стойността ѝ се сравнява с максимално възможната ... (qmax) ... Възможни са два случая...“<div class="law-cite">Приложение 8а, раздел III, т. 5</div></div>
+        <div class="law-quote">„Вратите/отворите за преминаване се считат за отделни участъци... ако ... в стена с дебелина до 0,7 m ... дължината на участъка ... се приема 0.“<div class="law-cite">Приложение 8а, раздел III, т. 6</div></div>
+      `
+      : `
+        <h4>${escHtml(t('proof.algorithm', null, 'Algorithm by Applicable Method'))}</h4>
+        <p>${escHtml(t('proof.methodA.steps', null, 'Method II (length of route): determine D_ai, choose nearest higher D from Table 11, obtain v_i, compute τ_i=L_i/v_i, then sum by route.'))}</p>
+        <div class="formula-block">${escHtml(t('proof.eq.methodA.time', null, 'τ_i = L_i / v_i'))}</div>
+        <div class="formula-block">${escHtml(t('proof.eq.methodA.total', null, 'τ_ev = Σ τ_i'))}</div>
+      `;
 
-    report.rows.forEach((row) => {
-      lines.push(`Segment ${row.step} | Connection #${row.connId} | ${row.fromName} -> ${row.toName}`);
-      lines.push(`  Type: ${row.typeName} | Direction: ${row.directionLabel}`);
-      lines.push(`  Geometry: L=${formatNumeric(row.length, 2)} m, W=${formatNumeric(row.width, 2)} m`);
-      if (row.lengthMismatch) {
-        lines.push(`  WARNING: specified length ${formatNumeric(row.specifiedLength, 2)} m differs from used length ${formatNumeric(row.length, 2)} m.`);
-      }
-      lines.push(`  Input People Basis: ${formatNumeric(row.peopleIn, 2)} persons`);
-
-      if (state.calculationMethod === 'B') {
-        lines.push(`  Flow Inputs: q=${formatNumeric(row.q, 2)} p/m/min, Q=${formatNumeric(row.Q, 2)} p/min`);
-        lines.push(`  Limit Check: q_max=${formatNumeric(row.qMax, 2)} p/m/min, q_gran=${formatNumeric(row.qGran, 2)} p/m/min`);
-        if (row.hasQueue || row.severity === 'blocked') {
-          const ds = row.dynamicStats || {};
-          lines.push('  Queue Branch: capacity-limited movement detected.');
-          lines.push(`  Queue Dynamics: N_total=${formatNumeric(ds.N_total, 2, '0.00')}, N_eff=${formatNumeric(ds.N_eff, 2, '0.00')}, t_fill=${formatNumeric(ds.t_filling, 4, '0.0000')} min`);
-          lines.push('  Time Equation Used: t = L / v_gran + N_eff * (1 / Q_out - 1 / Q_in)');
-          lines.push(`  Boundary Speed: v_gran=${formatNumeric(row.vGran, 2)} m/min`);
+    let segmentHtml = `<h4>${escHtml(t('proof.segmentCalc', null, 'Segment-by-Segment Calculations'))}</h4>`;
+    if (!report.rows.length) {
+      segmentHtml += `<p>${escHtml(t('proof.noSegments', null, 'No modeled segments are available. Add connected nodes and rerun the report.'))}</p>`;
+    } else {
+      segmentHtml += report.rows.map((row) => {
+        const base = [
+          `<p><strong>${escHtml(t('proof.seg.title', { step: row.step, id: row.connId, from: row.fromName, to: row.toName }, `Segment ${row.step} | Connection #${row.connId} | ${row.fromName} -> ${row.toName}`))}</strong></p>`,
+          `<p>${escHtml(t('proof.seg.geom', { length: formatNumeric(row.length, 2), width: formatNumeric(row.width, 2) }, `Geometry: L=${formatNumeric(row.length, 2)} m, δ=${formatNumeric(row.width, 2)} m`))}</p>`,
+          `<p>${escHtml(t('proof.seg.people', { people: formatNumeric(row.peopleIn, 2) }, `People basis: N=${formatNumeric(row.peopleIn, 2)}`))}</p>`,
+        ];
+        if (report.method === 'B') {
+          base.push(`<p>${escHtml(t('proof.seg.limit', {
+            q: formatNumeric(row.q, 2),
+            qmax: formatNumeric(row.qMax, 2),
+            qgran: formatNumeric(row.qGran, 2),
+            vgran: formatNumeric(row.vGran, 2),
+          }, `Flow limits: q=${formatNumeric(row.q, 2)}, q_max=${formatNumeric(row.qMax, 2)}, q_gran=${formatNumeric(row.qGran, 2)}, v_gran=${formatNumeric(row.vGran, 2)}`))}</p>`);
+          if (row.hasQueue || row.severity === 'blocked') {
+            const ds = row.dynamicStats || {};
+            base.push(`<div class="formula-block">τ_i = L_i / v_гран + N_eff · (1/Q_out - 1/Q_in)</div>`);
+            base.push(`<p>N_total=${formatNumeric(ds.N_total, 2, '0.00')}, N_eff=${formatNumeric(ds.N_eff, 2, '0.00')}, t_fill=${formatNumeric(ds.t_filling, 4, '0.0000')} min</p>`);
+          } else {
+            base.push('<div class="formula-block">τ_i = L_i / v_i</div>');
+          }
         } else {
-          lines.push('  Free-Flow Branch: no queue formation on this segment.');
-          lines.push('  Time Equation Used: t = L / v');
+          base.push(`<div class="formula-block">τ_i = L_i / v_i</div>`);
         }
-      } else {
-        lines.push(`  Density-Based Branch: D=${formatNumeric(row.density, 2)} p/m2, v=${formatNumeric(row.speed, 2)} m/min`);
-        lines.push('  Time Equation Used: t = L / v');
-      }
-
-      lines.push(`  Segment Result: t=${formatNumeric(row.time, 4)} min, congestion=${row.severityLabel}`);
-      lines.push('');
-    });
-
-    lines.push('CRITICAL EXIT REVIEW');
-    lines.push('----------------------------------------');
-    const exits = state.nodes.filter(n => n.typeId === 'exit');
-    if (exits.length === 0) {
-      lines.push('No exit nodes defined. Total time is based on maximum reachable node time.');
-    } else {
-      exits.forEach((exitNode) => {
-        lines.push(`Exit ${exitNode.name || `Node ${exitNode.id}`}: maxTime=${formatNumeric(exitNode.maxTime, 4)} min`);
-      });
-    }
-    lines.push(`FINAL EVACUATION RESULT = ${formatNumeric(report.totalTime, 3, '0.000')} min`);
-    lines.push('');
-    lines.push('INTERPRETATION');
-    if (report.bottleneckCount === 0) {
-      lines.push('- Network currently operates in non-congested regime for computed conditions.');
-    } else {
-      lines.push(`- ${report.bottleneckCount} segments are near or above safe operating capacity.`);
-      lines.push('- Review widths, route alternatives, and layout ordering to reduce queue propagation.');
-    }
-    if (report.maxTimeRow) {
-      lines.push(`- Longest time contribution: Connection #${report.maxTimeRow.connId} (${report.maxTimeRow.fromName} -> ${report.maxTimeRow.toName}) at ${formatNumeric(report.maxTimeRow.time, 3)} min.`);
-    }
-    if (report.maxDensityRow) {
-      lines.push(`- Peak density observed on Connection #${report.maxDensityRow.connId} at ${formatNumeric(report.maxDensityRow.density, 2)} p/m2.`);
+        if (row.lengthMismatch) {
+          base.push(`<div class="proof-warn">${escHtml(t('report.table.lengthWarningValue', { specified: formatNumeric(row.specifiedLength, 2), actual: formatNumeric(row.length, 2) }, `Specified ${formatNumeric(row.specifiedLength, 2)} m, using ${formatNumeric(row.length, 2)} m`))}</div>`);
+        }
+        base.push(`<p>${escHtml(t('proof.seg.result', { time: formatNumeric(row.time, 4), status: row.severityLabel }, `Result: τ=${formatNumeric(row.time, 4)} min, status=${row.severityLabel}`))}</p>`);
+        return `<div class="segment-block">${base.join('')}</div>`;
+      }).join('');
     }
 
-    mathProofContent.textContent = lines.join('\n');
+    const resultRiskLine = report.bottleneckCount > 0
+      ? t(
+        'report.summary.riskSome',
+        { count: report.bottleneckCount, blocked: report.blockedCount, queues: report.queueCount },
+        `${report.bottleneckCount} bottleneck segments were found (${report.blockedCount} blocked, ${report.queueCount} with queues).`
+      )
+      : t('report.summary.riskNone', null, 'No bottlenecks or blocked segments were detected.');
+
+    const resultHtml = `
+      <h4>${escHtml(t('proof.result', null, 'Final Result and Compliance Notes'))}</h4>
+      <p><strong>${escHtml(t('proof.total', { time: formatNumeric(report.totalTime, 3, '0.000') }, `Final evacuation time: ${formatNumeric(report.totalTime, 3, '0.000')} min`))}</strong></p>
+      ${report.lengthMismatchCount > 0 ? `<div class="proof-warn">${escHtml(t('proof.lengthWarnings', { count: report.lengthMismatchCount }, `Length warning: ${report.lengthMismatchCount} connections use geometric length different from the specified user value.`))}</div>` : ''}
+      <p>${escHtml(resultRiskLine)}</p>
+    `;
+
+    const citationsHtml = `
+      <h4>${escHtml(t('proof.citations', null, 'Quoted Bulgarian Legal Text (reference excerpts)'))}</h4>
+      <div class="law-quote">„... за хоризонтални участъци максимално възможната стойност на специфичната пропускателна способност е 164,2 чов./m.min, за врати ... 199,1 чов./m.min ...“<div class="law-cite">Приложение 8а, раздел III, т. 5</div></div>
+      <div class="law-quote">„... за хоризонтални участъци граничната специфична пропускателна способност е 135 чов./m.min, за движение по стълбище надолу ... 60,4 чов./m.min ...“<div class="law-cite">Приложение 8а, раздел III, т. 5, буква „б“</div></div>
+      <div class="law-quote">„Максималната стойност на СПС за врати/отвори е 199,1 чов./m.min.“<div class="law-cite">Чл. 63, ал. 5 и табл. 12</div></div>
+    `;
+
+    mathProofContent.innerHTML = [headerHtml, regulatoryHtml, algorithmHtml, segmentHtml, resultHtml, citationsHtml].join('');
   }
 
   function exportReportPdf() {
@@ -4122,14 +4300,14 @@
     generateReportDiagram(report, { theme: 'light' });
 
     if (!reportCanvas) {
-      alert('Report diagram is not available for export.');
+      alert(t('alert.reportDiagramUnavailable', null, 'Report diagram is not available for export.'));
       return;
     }
 
     const diagramDataUrl = reportCanvas.toDataURL('image/png');
     generateReportDiagram(report, { theme: 'dark' });
     render();
-    const proofHtml = escHtml(mathProofContent ? mathProofContent.textContent : '').replace(/\n/g, '<br>');
+    const proofHtml = mathProofContent ? mathProofContent.innerHTML : '';
 
     const tableColumns = getReportTableColumns(report);
     const tableHeaderHtml = tableColumns.map((col) => `<th>${escHtml(col.label)}</th>`).join('');
@@ -4139,33 +4317,33 @@
 
     const meta = report.metadata || {};
     const summaryItems = [
-      ['Total Evacuation Time', `${formatNumeric(report.totalTime, 3)} min`],
-      ['Total People', String(Math.round(report.totalPeople))],
-      ['Critical Exits', String(report.criticalExits.length)],
-      ['Connections', String(report.connectionCount)],
-      ['Bottlenecks', String(report.bottleneckCount)],
-      ['Blocked', String(report.blockedCount)],
-      ['Queued', String(report.queueCount)],
-      ['Length Warnings', String(report.lengthMismatchCount)],
-      ['Graph Size', report.graphSizeLabel],
-      ['Method', report.methodLabel],
-      ['Generated', report.generatedAtDisplay],
+      [t('report.stat.totalTime', null, 'Total Evacuation Time'), `${formatNumeric(report.totalTime, 3)} min`],
+      [t('report.stat.totalPeople', null, 'Total People'), String(Math.round(report.totalPeople))],
+      [t('report.stat.criticalExits', null, 'Critical Exits'), String(report.criticalExits.length)],
+      [t('report.stat.connections', null, 'Connections'), String(report.connectionCount)],
+      [t('report.stat.bottlenecks', null, 'Bottlenecks'), String(report.bottleneckCount)],
+      [t('overlay.blocked', null, 'Blocked'), String(report.blockedCount)],
+      [t('overlay.queues', null, 'Queues'), String(report.queueCount)],
+      [t('report.meta.lengthWarnings', null, 'Length Mismatch Warnings'), String(report.lengthMismatchCount)],
+      [t('report.stat.graphSize', null, 'Graph Size'), report.graphSizeLabel],
+      [t('report.stat.method', null, 'Method'), report.methodLabel],
+      [t('report.stat.generated', null, 'Generated'), report.generatedAtDisplay],
     ];
 
     const metaItems = [
-      ['Project', meta.project || 'Untitled'],
-      ['Author', meta.author || '-'],
-      ['Company', meta.company || '-'],
-      ['Scenario Date/Time', formatDateTimeForDisplay(meta.dateTime)],
-      ['Created', formatDateTimeForDisplay(meta.createdAt)],
-      ['Exported', formatDateTimeForDisplay(meta.exportedAt)],
-      ['Salamander Version', meta.salamanderVersion || SALAMANDER_VERSION],
-      ['Notes', meta.notes || '-'],
+      [t('report.meta.project', null, 'Project'), meta.project || t('common.untitled', null, 'Untitled')],
+      [t('report.meta.author', null, 'Author'), meta.author || '-'],
+      [t('report.meta.company', null, 'Company'), meta.company || '-'],
+      [t('report.meta.scenarioDate', null, 'Scenario Date/Time'), formatDateTimeForDisplay(meta.dateTime)],
+      [t('report.meta.created', null, 'Created'), formatDateTimeForDisplay(meta.createdAt)],
+      [t('report.meta.exported', null, 'Exported'), formatDateTimeForDisplay(meta.exportedAt)],
+      [t('report.meta.version', null, 'Salamander Version'), meta.salamanderVersion || SALAMANDER_VERSION],
+      [t('metadata.notes', null, 'Notes'), meta.notes || '-'],
     ];
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Popup blocked. Please allow popups to export report PDF.');
+      alert(t('alert.popupBlocked', null, 'Popup blocked. Please allow popups to export report PDF.'));
       return;
     }
 
@@ -4173,7 +4351,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Salamander Report PDF</title>
+  <title>${escHtml(t('pdf.title', null, 'Salamander Report PDF'))}</title>
   <style>
     :root { color-scheme: light; }
     * { box-sizing: border-box; }
@@ -4198,7 +4376,13 @@
     tr { break-inside: avoid; }
     th, td { border: 1px solid #d1d5db; padding: 4px 5px; text-align: left; vertical-align: top; }
     th { background: #f3f4f6; font-weight: 600; }
-    .proof { border: 1px solid #d1d5db; border-radius: 6px; padding: 10px; font-size: 10.5px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+    .proof { border: 1px solid #d1d5db; border-radius: 6px; padding: 10px; font-size: 10.5px; line-height: 1.45; word-break: break-word; }
+    .proof h4 { margin: 10px 0 6px; font-size: 12px; }
+    .proof .formula-block { margin: 6px 0; border: 1px solid #d1d5db; border-left: 3px solid #2563eb; border-radius: 4px; padding: 6px 8px; font-family: Consolas, "Courier New", monospace; font-size: 10px; background: #f8fafc; }
+    .proof .segment-block { margin: 8px 0; border: 1px solid #e5e7eb; border-radius: 4px; padding: 7px; background: #ffffff; }
+    .proof .law-quote { margin: 6px 0; border-left: 3px solid #d97706; background: #fff7ed; border-radius: 4px; padding: 7px; }
+    .proof .law-cite { margin-top: 3px; font-size: 9.5px; color: #7c2d12; }
+    .proof .proof-warn { margin: 6px 0; border: 1px solid #f59e0b; background: #fffbeb; border-radius: 4px; padding: 6px 8px; }
     @media print {
       .page { padding: 12mm; }
       .page-break { page-break-before: always; }
@@ -4208,42 +4392,44 @@
 </head>
 <body>
   <div class="page">
-    <h1>Salamander Evacuation Report</h1>
-    <div class="muted">Generated: ${escHtml(report.generatedAtDisplay)}</div>
-    <div class="muted">Method: ${escHtml(report.methodLabel)}</div>
+    <h1>${escHtml(t('pdf.h1', null, 'Salamander Evacuation Report'))}</h1>
+    <div class="muted">${escHtml(t('pdf.generated', null, 'Generated'))}: ${escHtml(report.generatedAtDisplay)}</div>
+    <div class="muted">${escHtml(t('pdf.method', null, 'Method'))}: ${escHtml(report.methodLabel)}</div>
 
-    <h2>Executive Summary</h2>
+    <h2>${escHtml(t('pdf.section.executive', null, 'Executive Summary'))}</h2>
     <div class="cards">
       ${summaryItems.map(([label, value]) => `<div class="card"><div class="label">${escHtml(label)}</div><div class="value">${escHtml(value)}</div></div>`).join('')}
     </div>
-    <p><strong>Interpretation:</strong> This report captures the current network geometry, applied movement method, queue/capacity behavior, and segment-by-segment timing contribution to the final evacuation duration.</p>
-    <p><strong>Risk Notes:</strong> ${report.bottleneckCount > 0 ? `${report.bottleneckCount} bottleneck segments were detected and should be reviewed for added width, reduced load, or alternate routing.` : 'No bottleneck segments were detected in the current state.'}</p>
+    <p><strong>${escHtml(t('pdf.interpretationLabel', null, 'Interpretation'))}:</strong> ${escHtml(t('pdf.interpretation', null, 'This report captures the current network geometry, applied movement method, queue/capacity behavior, and segment-by-segment timing contribution to the final evacuation duration.'))}</p>
+    <p><strong>${escHtml(t('pdf.risk.label', null, 'Risk Notes'))}:</strong> ${escHtml(report.bottleneckCount > 0
+      ? t('pdf.risk.some', { count: report.bottleneckCount }, `${report.bottleneckCount} bottleneck segments were detected and should be reviewed for added width, reduced load, or alternate routing.`)
+      : t('pdf.risk.none', null, 'No bottleneck segments were detected in the current state.'))}</p>
 
-    <h2>Project Metadata</h2>
+    <h2>${escHtml(t('pdf.section.metadata', null, 'Project Metadata'))}</h2>
     <div class="meta-grid">
       ${metaItems.map(([label, value]) => `<div class="meta-item"><div class="label">${escHtml(label)}</div><div class="value">${escHtml(value)}</div></div>`).join('')}
     </div>
 
-    <h2>Graph Diagram</h2>
+    <h2>${escHtml(t('pdf.section.diagram', null, 'Graph Diagram'))}</h2>
     <div class="diagram">
-      <img src="${diagramDataUrl}" alt="Report Diagram" />
+      <img src="${diagramDataUrl}" alt="${escHtml(t('pdf.alt.diagram', null, 'Report Diagram'))}" />
     </div>
   </div>
 
   <div class="page page-break">
-    <h2>Detailed Connection Table</h2>
+    <h2>${escHtml(t('pdf.section.table', null, 'Detailed Connection Table'))}</h2>
     <table>
       <thead>
         <tr>${tableHeaderHtml}</tr>
       </thead>
       <tbody>
-        ${tableRows || `<tr><td colspan="${tableColumns.length}">No connection data available.</td></tr>`}
+        ${tableRows || `<tr><td colspan="${tableColumns.length}">${escHtml(t('alert.noConnectionData', null, 'No connection data available.'))}</td></tr>`}
       </tbody>
     </table>
   </div>
 
   <div class="page page-break">
-    <h2>Verbose Mathematical Report</h2>
+    <h2>${escHtml(t('pdf.section.proof', null, 'Verbose Mathematical Report'))}</h2>
     <div class="proof">${proofHtml}</div>
   </div>
 </body>
@@ -4352,31 +4538,35 @@
         <line x1="3" y1="9" x2="21" y2="9" />
         <line x1="9" y1="21" x2="9" y2="9" />
       </svg>
-      Editing ${totalSelected} Item${totalSelected > 1 ? 's' : ''}
+      ${escHtml(t('props.editing', { count: totalSelected, itemWord: getLocalizedItemWord(totalSelected) }, `Editing ${totalSelected} ${getLocalizedItemWord(totalSelected)}`))}
     `;
 
     // 1. Common Properties (Node)
     if (selNodes.length > 0) {
       const section = document.createElement('div');
       section.className = 'prop-section';
-      section.innerHTML = `<h4>Node Properties (${selNodes.length})</h4>`;
+      section.innerHTML = `<h4>${escHtml(t('props.nodeProperties', { count: selNodes.length }, `Node Properties (${selNodes.length})`))}</h4>`;
 
       // Name (Single only)
       if (selNodes.length === 1) {
-        section.appendChild(createPropInput('Name', 'text', selNodes[0].name, (val) => {
+        section.appendChild(createPropInput(t('props.name', null, 'Name'), 'text', selNodes[0].name, (val) => {
           selNodes[0].name = val;
           commitHistory();
           render();
         }));
 
         // Coordinates (Read-only)
-        section.appendChild(createPropInput('X', 'number', selNodes[0].x, () => { }, true));
-        section.appendChild(createPropInput('Y', 'number', selNodes[0].y, () => { }, true));
+        section.appendChild(createPropInput(t('props.x', null, 'X'), 'number', selNodes[0].x, () => { }, true));
+        section.appendChild(createPropInput(t('props.y', null, 'Y'), 'number', selNodes[0].y, () => { }, true));
       }
 
       // Type
       const commonTypeId = getCommonValue(selNodes, n => n.typeId);
-      section.appendChild(createPropSelect('Type', state.nodeTypes, commonTypeId, (val) => {
+      const localizedNodeTypes = state.nodeTypes.map((opt) => ({
+        ...opt,
+        name: getNodeTypeDisplayName(opt.id, opt.name),
+      }));
+      section.appendChild(createPropSelect(t('props.type', null, 'Type'), localizedNodeTypes, commonTypeId, (val) => {
         selNodes.forEach(n => {
           n.typeId = val;
           if (val === 'door' && (!n.width || n.width <= 0)) n.width = 1.2;
@@ -4388,9 +4578,9 @@
 
       const commonPinned = getCommonValue(selNodes, n => !!n.pinned);
       const pinnedValue = commonPinned === '<various>' ? '<various>' : String(commonPinned);
-      section.appendChild(createPropSelect('Pinned (Order Graph)', [
-        { id: 'false', name: 'No' },
-        { id: 'true', name: 'Yes' },
+      section.appendChild(createPropSelect(t('props.pinned', null, 'Pinned (Order Graph)'), [
+        { id: 'false', name: t('common.no', null, 'No') },
+        { id: 'true', name: t('common.yes', null, 'Yes') },
       ], pinnedValue, (val) => {
         const isPinned = val === 'true';
         selNodes.forEach(n => n.pinned = isPinned);
@@ -4402,7 +4592,7 @@
       const sourceNodes = selNodes.filter(n => ['start', 'start2'].includes(n.typeId));
       if (sourceNodes.length > 0) {
         const commonPeople = getCommonValue(sourceNodes, n => n.people || 0);
-        section.appendChild(createPropInput('People (Start)', 'number', commonPeople, (val) => {
+        section.appendChild(createPropInput(t('props.peopleStart', null, 'People (Start)'), 'number', commonPeople, (val) => {
           sourceNodes.forEach(n => n.people = parseInt(val) || 0);
           recalcPeopleCounts();
           commitHistory();
@@ -4414,7 +4604,7 @@
       const doorNodes = selNodes.filter(n => n.typeId === 'door');
       if (doorNodes.length > 0) {
         const commonDoorWidth = getCommonValue(doorNodes, n => roundWidthMeters(n.width || 1.2));
-        section.appendChild(createPropInput('Door Width (m)', 'number', commonDoorWidth, (val) => {
+        section.appendChild(createPropInput(t('props.doorWidth', null, 'Door Width (m)'), 'number', commonDoorWidth, (val) => {
           const w = Math.max(0.05, roundWidthMeters(parseFloat(val) || 1.2));
           doorNodes.forEach(n => n.width = w);
           commitHistory();
@@ -4429,11 +4619,15 @@
     if (selConns.length > 0) {
       const section = document.createElement('div');
       section.className = 'prop-section';
-      section.innerHTML = `<h4>Connection Properties (${selConns.length})</h4>`;
+      section.innerHTML = `<h4>${escHtml(t('props.connectionProperties', { count: selConns.length }, `Connection Properties (${selConns.length})`))}</h4>`;
 
       // Type
       const commonTypeId = getCommonValue(selConns, c => c.typeId);
-      section.appendChild(createPropSelect('Type', state.connTypes, commonTypeId, (val) => {
+      const localizedConnTypes = state.connTypes.map((opt) => ({
+        ...opt,
+        name: getConnTypeDisplayName(opt.id, opt.name),
+      }));
+      section.appendChild(createPropSelect(t('props.type', null, 'Type'), localizedConnTypes, commonTypeId, (val) => {
         selConns.forEach(c => c.typeId = val);
         commitHistory();
         render();
@@ -4441,7 +4635,7 @@
 
       // Width
       const commonWidth = getCommonValue(selConns, c => c.width || 1.2);
-      section.appendChild(createPropInput('Width (m)', 'number', commonWidth, (val) => {
+      section.appendChild(createPropInput(t('props.width', null, 'Width (m)'), 'number', commonWidth, (val) => {
         const widthVal = roundWidthMeters(parseFloat(val) || 1.2);
         const clamped = Math.max(0.05, widthVal);
         selConns.forEach(c => c.width = clamped);
@@ -4452,7 +4646,7 @@
 
       // Distance
       const commonDist = getCommonValue(selConns, c => c.distance);
-      section.appendChild(createPropInput('Distance (m)', 'number', commonDist, (val) => {
+      section.appendChild(createPropInput(t('props.distance', null, 'Distance (m)'), 'number', commonDist, (val) => {
         const v = parseFloat(val);
         if (!isNaN(v) && v > 0) {
           const desired = Math.max(GRID_SIZE_METERS, roundDistanceMeters(v));
@@ -4478,7 +4672,11 @@
           `#${x.conn.id}: ${formatNumeric(x.info.specified, 2)} -> ${formatNumeric(x.info.actual, 2)} m`
         )).join('; ');
         const suffix = mismatchItems.length > 3 ? ` (+${mismatchItems.length - 3} more)` : '';
-        warn.textContent = `Warning: ${mismatchItems.length} selected connection lengths differ from specified values. ${preview}${suffix}`;
+        warn.textContent = t(
+          'props.warn.lengthMismatch',
+          { count: mismatchItems.length, preview, suffix },
+          `Warning: ${mismatchItems.length} selected connection lengths differ from the user-specified value. ${preview}${suffix}`
+        );
         section.appendChild(warn);
       }
 
@@ -4500,7 +4698,7 @@
 
     if (value === '<various>') {
       input.value = ''; // empty input to show placeholder
-      input.placeholder = '<various>';
+      input.placeholder = t('common.various', null, '<various>');
     } else {
       input.value = value;
     }
@@ -4537,7 +4735,7 @@
     if (value === '<various>') {
       const varOpt = document.createElement('option');
       varOpt.value = '';
-      varOpt.textContent = '<various>';
+      varOpt.textContent = t('common.various', null, '<various>');
       varOpt.selected = true;
       select.prepend(varOpt);
     } else {
@@ -4569,7 +4767,7 @@
       item.className = 'legend-item';
       item.innerHTML = `
         <div class="legend-dot" style="background:${t.color}"></div>
-        <span>${t.name}</span>
+        <span>${escHtml(getNodeTypeDisplayName(t.id, t.name))}</span>
       `;
       legendContent.appendChild(item);
     });
@@ -4582,7 +4780,7 @@
       const dash = t.dash.length > 0 ? 'dashed' : 'solid';
       item.innerHTML = `
         <div class="legend-line" style="background:${t.color}; border-bottom:${dash === 'dashed' ? '1px dashed' : 'none'}"></div>
-        <span>${t.name}</span>
+        <span>${escHtml(getConnTypeDisplayName(t.id, t.name))}</span>
       `;
       legendContent.appendChild(item);
     });
