@@ -156,7 +156,7 @@
   const lerp = (a, b, t) => a + (b - a) * t;
   const uid = () => Math.random().toString(36).slice(2, 9);
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-  const roundDistanceMeters = (m) => Math.round(m * 10) / 10; // 0.1m precision
+  const roundDistanceMeters = (m) => Math.round(m * 20) / 20; // 0.05m precision
   const roundWidthMeters = (m) => Math.round(m * 20) / 20; // 0.05m precision
 
   function getNodeRadiusPx(zoom = cam.zoom) {
@@ -867,7 +867,7 @@
 
     // Update Display
     if (totalTimeDisplay) {
-      totalTimeDisplay.textContent = state.totalEvacuationTime.toFixed(2);
+      totalTimeDisplay.textContent = state.totalEvacuationTime.toFixed(3);
     }
   }
 
@@ -2824,7 +2824,7 @@
 
   function generateReportSummary() {
     // Total Time
-    repTotalTime.textContent = state.totalEvacuationTime.toFixed(2);
+    repTotalTime.textContent = state.totalEvacuationTime.toFixed(3);
 
     // Total People (sum of people at Start nodes)
     const totalPeople = state.nodes.reduce((acc, n) => {
@@ -3097,7 +3097,7 @@
         text += `Exit Node [${e.name || e.id}]: Cumulative Time = ${e.maxTime.toFixed(4)} min\n`;
       });
       const max = Math.max(...exits.map(e => e.maxTime));
-      text += `\nFINAL RESULT: Total Evacuation Time = ${max.toFixed(2)} min\n`;
+      text += `\nFINAL RESULT: Total Evacuation Time = ${max.toFixed(3)} min\n`;
     } else {
       text += "No Exit nodes defined.\n";
     }
@@ -3314,7 +3314,7 @@
             updatePropertiesPanel();
             render();
           }
-        }, false, '0.1');
+        }, false, '0.05');
       if (commonDesired === null) {
         const input = desiredInput.querySelector('input');
         if (input) input.placeholder = 'auto';
@@ -3354,7 +3354,7 @@
           updatePropertiesPanel();
           render();
         }
-      }, false, '0.1'));
+      }, false, '0.05'));
 
       propsContent.appendChild(section);
     }

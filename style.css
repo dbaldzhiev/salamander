@@ -689,11 +689,7 @@ body {
 
 /* Bottom Panel & Tables */
 #bottom-panel {
-  height: 300px;
-  border-top: 1px solid var(--border-primary);
-  background: var(--bg-secondary);
-  display: flex;
-  flex-direction: column;
+  display: none !important;
 }
 
 .panel-header {
