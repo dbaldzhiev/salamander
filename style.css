@@ -385,6 +385,10 @@ body {
   cursor: crosshair;
 }
 
+#canvas-container[data-tool="addDoor"] {
+  cursor: crosshair;
+}
+
 #canvas-container[data-tool="connect"] {
   cursor: cell;
 }

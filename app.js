@@ -7,6 +7,13 @@
 (() => {
   'use strict';
 
+  const DEFAULT_CONN_TYPES = [
+    { id: 'normal', name: 'Normal', color: '#8b949e', dash: [] },
+    { id: 'stairs_up', name: 'Stairs (Up)', color: '#d29922', dash: [5, 5] },
+    { id: 'stairs_down', name: 'Stairs (Down)', color: '#a371f7', dash: [5, 5] },
+  ];
+  const ALLOWED_CONN_TYPE_IDS = new Set(DEFAULT_CONN_TYPES.map(t => t.id));
+
   // ─── Data Model ───────────────────────────────────────────
   const state = {
     nodes: [],
@@ -17,14 +24,9 @@
       { id: 'exit', name: 'Exit', color: '#f85149' },    // Red
       { id: 'normal', name: 'Normal', color: '#8b949e' }, // Grey
       { id: 'waypoint', name: 'Waypoint', color: '#58a6ff' }, // Blue (Split)
+      { id: 'door', name: 'Door Node', color: '#d29922' }, // Door node (rect)
     ],
-    connTypes: [
-      { id: 'normal', name: 'Normal', color: '#8b949e', dash: [] },
-      { id: 'stairs_up', name: 'Stairs (Up)', color: '#d29922', dash: [5, 5] },
-      { id: 'stairs_down', name: 'Stairs (Down)', color: '#a371f7', dash: [5, 5] },
-      { id: 'door', name: 'Door', color: '#3fb950', dash: [] }, // Green door
-      { id: 'door_emergency', name: 'Emergency Door', color: '#f85149', dash: [] },
-    ],
+    connTypes: DEFAULT_CONN_TYPES.map(t => ({ ...t, dash: [...(t.dash || [])] })),
     nextNodeId: 1,
     nextConnId: 1,
     regulations: null, // Loaded regulation data
@@ -33,21 +35,27 @@
   };
 
   // Editor State
-  let tool = 'select'; // select, addNode, connect, delete
+  let tool = 'select'; // select, addNode, addDoor, connect, delete
   let selectedItems = new Set(); // Set of strings "{type}:{id}"
   let connectSource = null;
   let isPanning = false;
   let isDraggingNode = false;
   let dragging = null;
+  let selectionBox = null;
   let dragStart = { x: 0, y: 0 };
   let lastMouse = { x: 0, y: 0 };
   let panStart = { x: 0, y: 0 };
   let cam = { x: 0, y: 0, zoom: 1 };
   const ZOOM_MIN = 0.1, ZOOM_MAX = 5;
+  const HISTORY_LIMIT = 100;
+  const historyStack = [];
+  let historyIndex = -1;
+  let lastHistorySignature = '';
+  let applyingHistory = false;
 
   // Constants
   const PIXELS_PER_METER = 30; // 1m = 30px, tuned for 20-30m schematics
-  const GRID_SIZE_METERS = 0.1; // 20cm snapping to hit 1.2m/2.4m increments
+  const GRID_SIZE_METERS = 0.1; // 10cm snapping for metric layout precision
   const GRID_SIZE = GRID_SIZE_METERS * PIXELS_PER_METER;
 
   const NODE_RADIUS = 15;
@@ -113,6 +121,52 @@
     return Math.max(NODE_RADIUS_MIN_PX, Math.min(NODE_RADIUS_MAX_PX, scaled));
   }
 
+  function getDoorWidthFactor(node) {
+    return Math.max(0.4, Math.min(3, (node.width || 1.2) / 1.2));
+  }
+
+  function getDoorAxisAngle(node) {
+    const incident = state.connections.filter(c => c.sourceId === node.id || c.targetId === node.id);
+    if (incident.length === 0) return Math.PI / 2;
+
+    const neighborIds = Array.from(new Set(incident.map(c => (c.sourceId === node.id ? c.targetId : c.sourceId))));
+    const neighbors = neighborIds
+      .map(id => state.nodes.find(n => n.id === id))
+      .filter(Boolean);
+
+    if (neighbors.length === 0) return Math.PI / 2;
+
+    if (neighbors.length === 1) {
+      const vAng = Math.atan2(neighbors[0].y - node.y, neighbors[0].x - node.x);
+      return vAng + Math.PI / 2;
+    }
+
+    // Use the farthest neighbor pair as the primary corridor vector.
+    let bestA = neighbors[0];
+    let bestB = neighbors[1];
+    let bestDistSq = -1;
+    for (let i = 0; i < neighbors.length; i++) {
+      for (let j = i + 1; j < neighbors.length; j++) {
+        const dx = neighbors[j].x - neighbors[i].x;
+        const dy = neighbors[j].y - neighbors[i].y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > bestDistSq) {
+          bestDistSq = d2;
+          bestA = neighbors[i];
+          bestB = neighbors[j];
+        }
+      }
+    }
+
+    if (bestDistSq <= 0) {
+      const fallbackAng = Math.atan2(bestA.y - node.y, bestA.x - node.x);
+      return fallbackAng + Math.PI / 2;
+    }
+
+    const corridorAng = Math.atan2(bestB.y - bestA.y, bestB.x - bestA.x);
+    return corridorAng + Math.PI / 2;
+  }
+
   function screenToWorld(sx, sy) {
     return {
       x: (sx - cam.x) / cam.zoom,
@@ -125,6 +179,100 @@
       x: wx * cam.zoom + cam.x,
       y: wy * cam.zoom + cam.y,
     };
+  }
+
+  function cloneData(v) {
+    return JSON.parse(JSON.stringify(v));
+  }
+
+  function normalizeConnectionTypes() {
+    const safeConnTypes = Array.isArray(state.connTypes) ? state.connTypes : [];
+    state.connTypes = DEFAULT_CONN_TYPES.map((base) => {
+      const match = safeConnTypes.find(t => t && t.id === base.id);
+      if (!match) return { ...base, dash: [...(base.dash || [])] };
+      return {
+        ...base,
+        ...match,
+        id: base.id,
+        dash: Array.isArray(match.dash) ? [...match.dash] : [...(base.dash || [])],
+      };
+    });
+
+    const fallbackTypeId = state.connTypes[0]?.id || 'normal';
+    state.connections.forEach((c) => {
+      if (!ALLOWED_CONN_TYPE_IDS.has(c.typeId)) {
+        c.typeId = fallbackTypeId;
+      }
+    });
+  }
+
+  function snapshotState() {
+    return {
+      nodes: cloneData(state.nodes),
+      connections: cloneData(state.connections),
+      nodeTypes: cloneData(state.nodeTypes),
+      connTypes: cloneData(state.connTypes),
+      nextNodeId: state.nextNodeId,
+      nextConnId: state.nextConnId,
+      calculationMethod: state.calculationMethod,
+      selectedItems: Array.from(selectedItems),
+      connectSource,
+    };
+  }
+
+  function applySnapshot(snap) {
+    applyingHistory = true;
+    state.nodes = cloneData(snap.nodes || []);
+    state.connections = cloneData(snap.connections || []);
+    state.nodeTypes = cloneData(snap.nodeTypes || state.nodeTypes);
+    state.connTypes = cloneData(snap.connTypes || state.connTypes);
+    normalizeConnectionTypes();
+    state.nextNodeId = snap.nextNodeId || 1;
+    state.nextConnId = snap.nextConnId || 1;
+    state.calculationMethod = snap.calculationMethod || state.calculationMethod;
+    selectedItems = new Set(snap.selectedItems || []);
+    connectSource = snap.connectSource || null;
+    if (connectSource && !state.nodes.some(n => n.id === connectSource)) {
+      connectSource = null;
+    }
+    const methodRadio = document.querySelector(`input[name="calcMethod"][value="${state.calculationMethod}"]`);
+    if (methodRadio) methodRadio.checked = true;
+    recalcPeopleCounts();
+    renderLegend();
+    updatePropertiesPanel();
+    render();
+    applyingHistory = false;
+  }
+
+  function commitHistory() {
+    if (applyingHistory) return;
+    const snap = snapshotState();
+    const signature = JSON.stringify(snap);
+    if (signature === lastHistorySignature) return;
+
+    if (historyIndex < historyStack.length - 1) {
+      historyStack.splice(historyIndex + 1);
+    }
+    historyStack.push(snap);
+    if (historyStack.length > HISTORY_LIMIT) {
+      historyStack.shift();
+    }
+    historyIndex = historyStack.length - 1;
+    lastHistorySignature = signature;
+  }
+
+  function undoHistory() {
+    if (historyIndex <= 0) return;
+    historyIndex -= 1;
+    applySnapshot(historyStack[historyIndex]);
+    lastHistorySignature = JSON.stringify(historyStack[historyIndex]);
+  }
+
+  function redoHistory() {
+    if (historyIndex >= historyStack.length - 1) return;
+    historyIndex += 1;
+    applySnapshot(historyStack[historyIndex]);
+    lastHistorySignature = JSON.stringify(historyStack[historyIndex]);
   }
 
   // ─── Canvas Sizing ────────────────────────────────────────
@@ -191,7 +339,6 @@
     let grp = limits.horizontal;
     if (typeId === 'stairs_up' || typeId === 'stair_up') grp = limits.stairs_up;
     else if (typeId === 'stairs_down' || typeId === 'stair_down') grp = limits.stairs_down;
-    else if (typeId && typeId.includes('door')) grp = limits.doors;
 
     return {
       q_max: grp.q_max,
@@ -288,7 +435,6 @@
     let grp = limits.horizontal;
     if (typeId === 'stairs_up') grp = limits.stairs_up;
     else if (typeId === 'stairs_down') grp = limits.stairs_down;
-    else if (typeId && typeId.includes('door')) grp = limits.doors;
 
     return {
       q_max: grp.q_max,
@@ -468,7 +614,6 @@
 
         // Formula 2 (Norm 2, pg 6):
         // t = (L / v_gran) + N * (1/Q_out - 1/Q_in)
-        // Note: For thin doors (thickness <= 0.7m), L is assumed 0 for the travel part.
 
         const N_total = p.people || 0;
         const Q_out = p.width * limits.q_gran;
@@ -483,13 +628,8 @@
         const table = lookupTable11(p.type, density);
         const v_density = table.v > 0.1 ? table.v : 100; // Fallback to 100 if v=0 (jammed? no, v=0 at high D)
 
-        let t_filling = 0;
-        if (p.type.includes('door') && p.length <= 0.7) {
-          t_filling = 0;
-        } else {
-          // Time to Cross for the group
-          t_filling = (p.length / v_density);
-        }
+        // Time to cross for the group
+        const t_filling = (p.length / v_density);
 
         const N_out = Q_out * t_filling;
         const N_eff = Math.max(0, N_total - N_out);
@@ -517,7 +657,7 @@
           delayTerm = N_eff * Math.max(0, val);
         } else if (Q_out > 0.1) {
           // Fallback if Q_in is 0? 
-          delayTerm = N / Q_out;
+          delayTerm = N_total / Q_out;
         }
 
         conn.travelTime = travelTerm + delayTerm;
@@ -545,11 +685,6 @@
 
           conn.travelTime = v_curr > 0.1 ? p.length / v_curr : 0;
         }
-      }
-
-      // Door Logic: Thin Wall (<=0.7m) -> t=0 if no queue
-      if (p.type.includes('door') && p.length <= 0.7 && !hasQueue) {
-        conn.travelTime = 0;
       }
 
       // Store state for downstream
@@ -667,8 +802,28 @@
       drawNode(node);
     }
 
+    drawSelectionBox();
+
     // Update Table
     renderTable();
+  }
+
+  function drawSelectionBox() {
+    if (!selectionBox) return;
+    const x = Math.min(selectionBox.startX, selectionBox.endX);
+    const y = Math.min(selectionBox.startY, selectionBox.endY);
+    const w = Math.abs(selectionBox.endX - selectionBox.startX);
+    const h = Math.abs(selectionBox.endY - selectionBox.startY);
+    if (w < 1 && h < 1) return;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(88,166,255,0.16)';
+    ctx.strokeStyle = 'rgba(88,166,255,0.9)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 4]);
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x, y, w, h);
+    ctx.restore();
   }
 
   function drawGrid(w, h) {
@@ -721,12 +876,25 @@
     const r = getNodeRadiusPx();
     const isSelected = selectedItems.has(`node:${node.id}`);
     const isConnectSource = connectSource === node.id;
+    const isDoorNode = node.typeId === 'door';
+    const doorWidthFactor = getDoorWidthFactor(node);
+    const doorHalfLong = r * 1.2 * doorWidthFactor;
+    const doorHalfShort = Math.max(3, r * 0.38);
+    const doorAngle = getDoorAxisAngle(node);
 
     // Glow
     if (isSelected || isConnectSource) {
       ctx.save();
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, r + 8, 0, Math.PI * 2);
+      if (isDoorNode) {
+        ctx.translate(s.x, s.y);
+        // Rectangle long axis follows connection-perpendicular angle.
+        ctx.rotate(doorAngle);
+        ctx.beginPath();
+        ctx.roundRect(-(doorHalfLong + 6), -(doorHalfShort + 6), (doorHalfLong + 6) * 2, (doorHalfShort + 6) * 2, 5);
+      } else {
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, r + 8, 0, Math.PI * 2);
+      }
       const grad = ctx.createRadialGradient(s.x, s.y, r * 0.7, s.x, s.y, r + 12);
       grad.addColorStop(0, nt.color + '40');
       grad.addColorStop(1, 'transparent');
@@ -735,27 +903,53 @@
       ctx.restore();
     }
 
-    // Outer ring
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
-    const bodyGrad = ctx.createRadialGradient(s.x - r * 0.3, s.y - r * 0.3, 0, s.x, s.y, r);
-    bodyGrad.addColorStop(0, lightenColor(nt.color, 30));
-    bodyGrad.addColorStop(1, nt.color);
-    ctx.fillStyle = bodyGrad;
-    ctx.fill();
+    if (isDoorNode) {
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.rotate(doorAngle);
 
-    // Inner circle
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, r * 0.7, 0, Math.PI * 2);
-    ctx.fillStyle = '#161b22';
-    ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(-doorHalfLong, -doorHalfShort, doorHalfLong * 2, doorHalfShort * 2, 3);
+      const bodyGrad = ctx.createLinearGradient(0, -doorHalfShort, 0, doorHalfShort);
+      bodyGrad.addColorStop(0, lightenColor(nt.color, 30));
+      bodyGrad.addColorStop(1, nt.color);
+      ctx.fillStyle = bodyGrad;
+      ctx.fill();
 
-    // Border
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
-    ctx.strokeStyle = isSelected ? '#fff' : nt.color;
-    ctx.lineWidth = isSelected ? 2.5 : 1.5;
-    ctx.stroke();
+      ctx.beginPath();
+      ctx.roundRect(-doorHalfLong + 2, -doorHalfShort + 2, doorHalfLong * 2 - 4, doorHalfShort * 2 - 4, 2);
+      ctx.fillStyle = '#161b22';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.roundRect(-doorHalfLong, -doorHalfShort, doorHalfLong * 2, doorHalfShort * 2, 3);
+      ctx.strokeStyle = isSelected ? '#fff' : nt.color;
+      ctx.lineWidth = isSelected ? 2.5 : 1.5;
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      // Outer ring
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+      const bodyGrad = ctx.createRadialGradient(s.x - r * 0.3, s.y - r * 0.3, 0, s.x, s.y, r);
+      bodyGrad.addColorStop(0, lightenColor(nt.color, 30));
+      bodyGrad.addColorStop(1, nt.color);
+      ctx.fillStyle = bodyGrad;
+      ctx.fill();
+
+      // Inner circle
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r * 0.7, 0, Math.PI * 2);
+      ctx.fillStyle = '#161b22';
+      ctx.fill();
+
+      // Border
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+      ctx.strokeStyle = isSelected ? '#fff' : nt.color;
+      ctx.lineWidth = isSelected ? 2.5 : 1.5;
+      ctx.stroke();
+    }
 
     // People count inside the node
     const people = node.people || 0;
@@ -974,9 +1168,23 @@
 
   // ─── Hit Testing ──────────────────────────────────────────
   function hitTestNode(wx, wy) {
+    const rWorld = getNodeRadiusPx() / cam.zoom;
+    const marginWorld = HIT_MARGIN / cam.zoom;
     for (let i = state.nodes.length - 1; i >= 0; i--) {
       const n = state.nodes[i];
-      if (dist({ x: wx, y: wy }, n) <= NODE_RADIUS + HIT_MARGIN) return n;
+      if (n.typeId === 'door') {
+        const doorWidthFactor = getDoorWidthFactor(n);
+        const halfLong = rWorld * 1.2 * doorWidthFactor + marginWorld;
+        const halfShort = rWorld * 0.38 + marginWorld;
+        const angle = getDoorAxisAngle(n);
+        const dx = wx - n.x;
+        const dy = wy - n.y;
+        const localX = dx * Math.cos(angle) + dy * Math.sin(angle);
+        const localY = -dx * Math.sin(angle) + dy * Math.cos(angle);
+        if (Math.abs(localX) <= halfLong && Math.abs(localY) <= halfShort) return n;
+      } else if (dist({ x: wx, y: wy }, n) <= rWorld + marginWorld) {
+        return n;
+      }
     }
     return null;
   }
@@ -1031,8 +1239,65 @@
     return best;
   }
 
+  function getSelectionRect(box) {
+    return {
+      left: Math.min(box.startX, box.endX),
+      right: Math.max(box.startX, box.endX),
+      top: Math.min(box.startY, box.endY),
+      bottom: Math.max(box.startY, box.endY),
+    };
+  }
+
+  function isPointInRect(x, y, rect) {
+    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+  }
+
+  function ccw(ax, ay, bx, by, cx, cy) {
+    return (cy - ay) * (bx - ax) > (by - ay) * (cx - ax);
+  }
+
+  function segmentsIntersect(p1x, p1y, p2x, p2y, p3x, p3y, p4x, p4y) {
+    return ccw(p1x, p1y, p3x, p3y, p4x, p4y) !== ccw(p2x, p2y, p3x, p3y, p4x, p4y) &&
+      ccw(p1x, p1y, p2x, p2y, p3x, p3y) !== ccw(p1x, p1y, p2x, p2y, p4x, p4y);
+  }
+
+  function segmentIntersectsRect(x1, y1, x2, y2, rect) {
+    if (isPointInRect(x1, y1, rect) || isPointInRect(x2, y2, rect)) return true;
+    const l = rect.left, r = rect.right, t = rect.top, b = rect.bottom;
+    return segmentsIntersect(x1, y1, x2, y2, l, t, r, t) ||
+      segmentsIntersect(x1, y1, x2, y2, r, t, r, b) ||
+      segmentsIntersect(x1, y1, x2, y2, r, b, l, b) ||
+      segmentsIntersect(x1, y1, x2, y2, l, b, l, t);
+  }
+
+  function applySelectionBox(box) {
+    const rect = getSelectionRect(box);
+    if (!box.multi) selectedItems.clear();
+
+    state.nodes.forEach(n => {
+      const s = worldToScreen(n.x, n.y);
+      if (isPointInRect(s.x, s.y, rect)) {
+        selectedItems.add(`node:${n.id}`);
+      }
+    });
+
+    state.connections.forEach(c => {
+      const src = state.nodes.find(n => n.id === c.sourceId);
+      const tgt = state.nodes.find(n => n.id === c.targetId);
+      if (!src || !tgt) return;
+      const s = worldToScreen(src.x, src.y);
+      const e = worldToScreen(tgt.x, tgt.y);
+      if (segmentIntersectsRect(s.x, s.y, e.x, e.y, rect)) {
+        selectedItems.add(`connection:${c.id}`);
+      }
+    });
+
+    updatePropertiesPanel();
+  }
+
   // Split a connection at a point, creating a new node and two new connections
-  function splitConnection(conn, wx, wy) {
+  function splitConnection(conn, wx, wy, options = {}) {
+    const { skipHistory = false, nodeTypeId = 'waypoint' } = options;
     const src = state.nodes.find(n => n.id === conn.sourceId);
     const tgt = state.nodes.find(n => n.id === conn.targetId);
     if (!src || !tgt) return null;
@@ -1043,9 +1308,10 @@
     const newNode = {
       id: state.nextNodeId++,
       name: '',
-      typeId: 'waypoint', // Split nodes vary are waypoints
+      typeId: nodeTypeId,
       x: sx,
       y: sy,
+      width: nodeTypeId === 'door' ? 1.2 : undefined,
       props: {},
     };
     state.nodes.push(newNode);
@@ -1085,16 +1351,21 @@
     state.connections.push(conn1, conn2);
 
     recalcPeopleCounts();
+    if (!skipHistory) commitHistory();
     return newNode;
   }
 
   // ─── Node & Connection Ops ────────────────────────────────
-  function createNode(wx, wy) {
+  function createNode(wx, wy, options = {}) {
+    const { forcedTypeId = null, skipHistory = false } = options;
     // Auto-assign type based on creation order
     let typeId = 'undefined';
     let people = 0;
 
-    if (state.nodes.length === 0) {
+    if (forcedTypeId) {
+      typeId = forcedTypeId;
+      people = 0;
+    } else if (state.nodes.length === 0) {
       typeId = 'start';
       people = 10;
     } else if (state.nodes.length === 1) {
@@ -1111,16 +1382,19 @@
       typeId: typeId,
       x: snapToGrid(wx),
       y: snapToGrid(wy),
+      width: typeId === 'door' ? 1.2 : undefined,
       people: people,
       props: {},
     };
     state.nodes.push(node);
     selectItem({ type: 'node', id: node.id });
+    if (!skipHistory) commitHistory();
     render();
     return node;
   }
 
-  function createConnection(srcId, tgtId) {
+  function createConnection(srcId, tgtId, options = {}) {
+    const { skipHistory = false } = options;
     // Prevent duplicate
     if (state.connections.find(c =>
       (c.sourceId === srcId && c.targetId === tgtId) ||
@@ -1147,22 +1421,90 @@
     state.connections.push(conn);
     selectItem({ type: 'connection', id: conn.id });
     recalcPeopleCounts();
+    if (!skipHistory) commitHistory();
     render();
     return conn;
   }
 
-  function deleteNode(nodeId) {
+  function canTraverseConnection(conn, fromId, toId) {
+    const dir = conn.direction || 'forward';
+    if (conn.sourceId === fromId && conn.targetId === toId) {
+      return dir === 'forward' || dir === 'both';
+    }
+    if (conn.sourceId === toId && conn.targetId === fromId) {
+      return dir === 'backward' || dir === 'both';
+    }
+    return false;
+  }
+
+  function tryMergeWaypointDeletion(nodeId) {
+    const node = state.nodes.find(n => n.id === nodeId);
+    if (!node || !['waypoint', 'door'].includes(node.typeId)) return null;
+    const incident = state.connections.filter(c => c.sourceId === nodeId || c.targetId === nodeId);
+    if (incident.length !== 2) return null;
+    const [c1, c2] = incident;
+    if (c1.typeId !== c2.typeId) return null;
+
+    const n1 = c1.sourceId === nodeId ? c1.targetId : c1.sourceId;
+    const n2 = c2.sourceId === nodeId ? c2.targetId : c2.sourceId;
+    if (n1 === n2) return null;
+    if (state.connections.some(c =>
+      (c.sourceId === n1 && c.targetId === n2) ||
+      (c.sourceId === n2 && c.targetId === n1))) {
+      return null;
+    }
+
+    const can12 = (canTraverseConnection(c1, n1, nodeId) && canTraverseConnection(c2, nodeId, n2)) ||
+      (canTraverseConnection(c2, n1, nodeId) && canTraverseConnection(c1, nodeId, n2));
+    const can21 = (canTraverseConnection(c1, n2, nodeId) && canTraverseConnection(c2, nodeId, n1)) ||
+      (canTraverseConnection(c2, n2, nodeId) && canTraverseConnection(c1, nodeId, n1));
+
+    let direction = 'both';
+    if (can12 && !can21) direction = 'forward';
+    if (!can12 && can21) direction = 'backward';
+    if (!can12 && !can21) return null;
+
+    return {
+      id: state.nextConnId++,
+      sourceId: n1,
+      targetId: n2,
+      typeId: c1.typeId,
+      direction,
+      distance: roundDistanceMeters((c1.distance || 0) + (c2.distance || 0)),
+      distanceManual: !!(c1.distanceManual || c2.distanceManual),
+      speed: (c1.speed || c2.speed || 0),
+      weight: Math.max(c1.weight || 1, c2.weight || 1),
+      congestion: c1.congestion === c2.congestion ? c1.congestion : 'none',
+      width: roundWidthMeters(((c1.width || 1.2) + (c2.width || 1.2)) / 2),
+      props: { ...c1.props, ...c2.props },
+    };
+  }
+
+  function deleteNode(nodeId, options = {}) {
+    const { skipHistory = false } = options;
+    const restoredConn = tryMergeWaypointDeletion(nodeId);
+
     state.nodes = state.nodes.filter(n => n.id !== nodeId);
     state.connections = state.connections.filter(c => c.sourceId !== nodeId && c.targetId !== nodeId);
-    if (selectedItems.has(`node:${nodeId}`)) clearSelection();
+    if (restoredConn) {
+      state.connections.push(restoredConn);
+    }
+    selectedItems.delete(`node:${nodeId}`);
+    sanitizeSelection();
     recalcPeopleCounts();
+    if (!skipHistory) commitHistory();
+    updatePropertiesPanel();
     render();
   }
 
-  function deleteConnection(connId) {
+  function deleteConnection(connId, options = {}) {
+    const { skipHistory = false } = options;
     state.connections = state.connections.filter(c => c.id !== connId);
-    if (selectedItems.has(`connection:${connId}`)) clearSelection();
+    selectedItems.delete(`connection:${connId}`);
+    sanitizeSelection();
     recalcPeopleCounts();
+    if (!skipHistory) commitHistory();
+    updatePropertiesPanel();
     render();
   }
 
@@ -1230,6 +1572,11 @@
   // ─── Interaction Helpers ─────────────────────────────────
   function hideHint() {
     if (canvasHint) canvasHint.style.display = 'none';
+  }
+  function showHint(text) {
+    if (!canvasHint) return;
+    canvasHint.textContent = text;
+    canvasHint.style.display = 'block';
   }
   function escHtml(s) {
     if (s == null) return '';
@@ -1457,7 +1804,7 @@
           if (hPos) {
             const d = Math.sqrt((sx - hPos.x) ** 2 + (sy - hPos.y) ** 2);
             if (d <= 8) {
-              dragging = { type: 'width', connId: conn.id };
+              dragging = { type: 'width', connId: conn.id, changed: false };
               return;
             }
           }
@@ -1477,6 +1824,7 @@
             nodeId: hitNode.id,
             offsetX: w.x - hitNode.x,
             offsetY: w.y - hitNode.y,
+            changed: false,
           };
           container.classList.add('dragging-node');
         } else {
@@ -1484,12 +1832,29 @@
           if (hitConn) {
             selectItem({ type: 'connection', id: hitConn.id }, multi);
           } else {
-            if (!multi) clearSelection();
+            selectionBox = {
+              startX: sx,
+              startY: sy,
+              endX: sx,
+              endY: sy,
+              multi,
+            };
+            dragging = { type: 'box' };
+            render();
           }
         }
         break;
       }
       case 'addNode': {
+        const hitNode = hitTestNode(w.x, w.y);
+        if (hitNode) {
+          setTool('connect');
+          connectSource = hitNode.id;
+          showHint('Connect mode: click the next node or a segment');
+          render();
+          break;
+        }
+
         // Check if clicking on a connection to split it
         const hitConn = hitTestConnectionWithPoint(w.x, w.y);
         if (hitConn) {
@@ -1505,6 +1870,25 @@
         hideHint();
         break;
       }
+      case 'addDoor': {
+        const hitNode = hitTestNode(w.x, w.y);
+        if (hitNode) {
+          break;
+        }
+
+        const hitConn = hitTestConnectionWithPoint(w.x, w.y);
+        if (hitConn) {
+          const newDoor = splitConnection(hitConn.conn, hitConn.proj.x, hitConn.proj.y, { nodeTypeId: 'door' });
+          if (newDoor) {
+            selectItem({ type: 'node', id: newDoor.id });
+            render();
+          }
+        } else {
+          createNode(w.x, w.y, { forcedTypeId: 'door' });
+          hideHint();
+        }
+        break;
+      }
       case 'connect': {
         const hitNode = hitTestNode(w.x, w.y);
         if (hitNode) {
@@ -1514,26 +1898,30 @@
           } else {
             createConnection(connectSource, hitNode.id);
             connectSource = null;
+            hideHint();
           }
         } else {
           // T/X intersection: check if click is near a connection
           const hitConn = hitTestConnectionWithPoint(w.x, w.y);
           if (hitConn) {
-            const newNode = splitConnection(hitConn.conn, hitConn.proj.x, hitConn.proj.y);
+            const newNode = splitConnection(hitConn.conn, hitConn.proj.x, hitConn.proj.y, { skipHistory: true });
             if (newNode) {
               if (connectSource) {
                 // Complete connection from source to the new split node
-                createConnection(connectSource, newNode.id);
+                createConnection(connectSource, newNode.id, { skipHistory: true });
                 connectSource = null;
+                hideHint();
               } else {
                 // Start a connection from the new split node
                 connectSource = newNode.id;
               }
               selectItem({ type: 'node', id: newNode.id });
+              commitHistory();
               render();
             }
           } else {
             connectSource = null;
+            hideHint();
             render();
           }
         }
@@ -1566,9 +1954,13 @@
       if (dragging.type === 'node') {
         const node = state.nodes.find(n => n.id === dragging.nodeId);
         if (node) {
-          node.x = snapToGrid(tempMouseWorld.x - dragging.offsetX);
-          node.y = snapToGrid(tempMouseWorld.y - dragging.offsetY);
-          updateConnectionDistances();
+          const nx = snapToGrid(tempMouseWorld.x - dragging.offsetX);
+          const ny = snapToGrid(tempMouseWorld.y - dragging.offsetY);
+          if (node.x !== nx || node.y !== ny) {
+            dragging.changed = true;
+          }
+          node.x = nx;
+          node.y = ny;
           updateConnectionDistances();
           // Update properties panel to reflect new coordinates
           if (selectedItems.has(`node:${node.id}`)) {
@@ -1624,12 +2016,21 @@
 
             // Convert back to meters
             const widthMeters = totalWidthPx / (PIXELS_PER_METER * cam.zoom);
-            conn.width = Math.max(0.05, roundWidthMeters(widthMeters));
+            const nextWidth = Math.max(0.05, roundWidthMeters(widthMeters));
+            if (conn.width !== nextWidth) {
+              dragging.changed = true;
+              conn.width = nextWidth;
+              recalcFireSafety();
+            }
 
             updatePropertiesPanel();
             render();
           }
         }
+      } else if (dragging.type === 'box') {
+        selectionBox.endX = sx;
+        selectionBox.endY = sy;
+        render();
       }
       return;
     }
@@ -1646,17 +2047,44 @@
       container.classList.remove('panning');
     }
     if (dragging) {
+      if (dragging.type === 'node') {
+        if (dragging.changed) {
+          updateConnectionDistances();
+          commitHistory();
+        }
+        container.classList.remove('dragging-node');
+        updatePropertiesPanel();
+      } else if (dragging.type === 'width') {
+        if (dragging.changed) {
+          commitHistory();
+        }
+      } else if (dragging.type === 'box') {
+        const dx = Math.abs(selectionBox.endX - selectionBox.startX);
+        const dy = Math.abs(selectionBox.endY - selectionBox.startY);
+        if (dx < 3 && dy < 3) {
+          if (!selectionBox.multi) clearSelection();
+        } else {
+          applySelectionBox(selectionBox);
+        }
+        selectionBox = null;
+        render();
+      }
       dragging = null;
-      container.classList.remove('dragging-node');
-      updateConnectionDistances();
-      updatePropertiesPanel();
     }
   });
 
   canvas.addEventListener('mouseleave', () => {
     if (dragging) {
+      if (dragging.type === 'node' && dragging.changed) {
+        updateConnectionDistances();
+        commitHistory();
+      }
       dragging = null;
       container.classList.remove('dragging-node');
+      if (selectionBox) {
+        selectionBox = null;
+        render();
+      }
     }
     tempMouseWorld = null;
   });
@@ -1685,21 +2113,32 @@
     // Don't trigger shortcuts while typing
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
 
-    switch (e.key.toLowerCase()) {
+    const key = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && key === 'z') {
+      e.preventDefault();
+      undoHistory();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (key === 'y' || (e.shiftKey && key === 'z'))) {
+      e.preventDefault();
+      redoHistory();
+      return;
+    }
+
+    switch (key) {
       case 'v': setTool('select'); break;
       case 'n': setTool('addNode'); break;
+      case 'o': setTool('addDoor'); break;
       case 'c': setTool('connect'); break;
       case 'd': setTool('delete'); break;
       case 'delete':
       case 'backspace':
-        if (selected) {
-          if (selected.type === 'node') deleteNode(selected.id);
-          else if (selected.type === 'connection') deleteConnection(selected.id);
-        }
+        deleteSelection();
         break;
       case 'escape':
         clearSelection();
         connectSource = null;
+        hideHint();
         render();
         break;
     }
@@ -1709,6 +2148,8 @@
   function setTool(t) {
     tool = t;
     connectSource = null;
+    selectionBox = null;
+    if (t !== 'connect') hideHint();
     document.querySelectorAll('.tool-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tool === t);
     });
@@ -1728,6 +2169,7 @@
     state.nextNodeId = 1;
     state.nextConnId = 1;
     clearSelection();
+    commitHistory();
     render();
   });
 
@@ -1771,12 +2213,13 @@
           if (data.connections) state.connections = data.connections;
           if (data.nodeTypes) state.nodeTypes = data.nodeTypes;
           if (data.connTypes) state.connTypes = data.connTypes;
+          normalizeConnectionTypes();
           state.nextNodeId = Math.max(0, ...state.nodes.map(n => n.id)) + 1;
           state.nextConnId = Math.max(0, ...state.connections.map(c => c.id)) + 1;
-          clearSelection();
+          recalcPeopleCounts();
           clearSelection();
           renderLegend();
-          render();
+          commitHistory();
           render();
         } catch (err) {
           alert('Failed to import: ' + err.message);
@@ -1802,6 +2245,8 @@
       })
       .catch(err => console.error('Failed to load regulations:', err));
 
+    normalizeConnectionTypes();
+
     // Center camera
     const rect = container.getBoundingClientRect();
     cam.x = rect.width / 2;
@@ -1810,23 +2255,8 @@
     container.setAttribute('data-tool', tool);
     resizeCanvas();
     renderLegend();
+    commitHistory();
     render();
-
-    // Keyboard shortcuts
-    window.addEventListener('keydown', (e) => {
-      if (e.target.matches('input, select, textarea')) return;
-
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        deleteSelection();
-      }
-      if (e.key === 'Escape') {
-        clearSelection();
-        tool = 'select';
-        container.setAttribute('data-tool', tool);
-        connectSource = null;
-        render();
-      }
-    });
   }
 
   // Wait for fonts
@@ -2099,7 +2529,7 @@
           text += `       where Q_out = δ * q_gran = ${(Q_out).toFixed(2)} p/min\n`;
 
           text += `     - Term 1: Travel Time (l/v_gran)\n`;
-          text += `       = ${c.typeId.includes('door') && c.distance <= 0.7 ? '0 (Thin Door Assumption)' : `${c.distance.toFixed(2)} / ${stats.v_gran || 10} = ${(c.distance / (stats.v_gran || 10)).toFixed(4)}`} min\n`;
+          text += `       = ${c.distance.toFixed(2)} / ${stats.v_gran || 10} = ${(c.distance / (stats.v_gran || 10)).toFixed(4)} min\n`;
 
           const val = (1 / Q_out) - (1 / Q_in);
           const delay = ds.N_eff * Math.max(0, val);
@@ -2172,23 +2602,42 @@
     render();
   }
 
+  function sanitizeSelection() {
+    const next = new Set();
+    selectedItems.forEach(key => {
+      const [type, idStr] = key.split(':');
+      const id = parseInt(idStr, 10);
+      if (type === 'node' && state.nodes.some(n => n.id === id)) next.add(key);
+      if (type === 'connection' && state.connections.some(c => c.id === id)) next.add(key);
+    });
+    selectedItems = next;
+  }
+
   function deleteSelection() {
     if (selectedItems.size === 0) return;
 
+    let changed = false;
     // Convert to array to avoid modification during iteration issues
     const keys = Array.from(selectedItems);
     keys.forEach(key => {
       const [type, idStr] = key.split(':');
       const id = parseInt(idStr);
-      if (type === 'node') deleteNode(id);
-      else if (type === 'connection') deleteConnection(id);
+      if (type === 'node') {
+        deleteNode(id, { skipHistory: true });
+        changed = true;
+      } else if (type === 'connection') {
+        deleteConnection(id, { skipHistory: true });
+        changed = true;
+      }
     });
 
     clearSelection();
+    if (changed) commitHistory();
   }
 
   // ─── Properties Panel Logic ──────────────────────────────
   function updatePropertiesPanel() {
+    sanitizeSelection();
     // Clear content
     propsContent.innerHTML = '';
 
@@ -2238,6 +2687,7 @@
       if (selNodes.length === 1) {
         section.appendChild(createPropInput('Name', 'text', selNodes[0].name, (val) => {
           selNodes[0].name = val;
+          commitHistory();
           render();
         }));
 
@@ -2249,8 +2699,12 @@
       // Type
       const commonTypeId = getCommonValue(selNodes, n => n.typeId);
       section.appendChild(createPropSelect('Type', state.nodeTypes, commonTypeId, (val) => {
-        selNodes.forEach(n => n.typeId = val);
+        selNodes.forEach(n => {
+          n.typeId = val;
+          if (val === 'door' && (!n.width || n.width <= 0)) n.width = 1.2;
+        });
         recalcPeopleCounts();
+        commitHistory();
         render();
       }));
 
@@ -2261,8 +2715,21 @@
         section.appendChild(createPropInput('People (Start)', 'number', commonPeople, (val) => {
           sourceNodes.forEach(n => n.people = parseInt(val) || 0);
           recalcPeopleCounts();
+          commitHistory();
           render();
         }, sourceNodes.length !== selNodes.length)); // Disable if mixed source/non-source? No, just apply to sources.
+      }
+
+      // Door width (Door nodes only)
+      const doorNodes = selNodes.filter(n => n.typeId === 'door');
+      if (doorNodes.length > 0) {
+        const commonDoorWidth = getCommonValue(doorNodes, n => roundWidthMeters(n.width || 1.2));
+        section.appendChild(createPropInput('Door Width (m)', 'number', commonDoorWidth, (val) => {
+          const w = Math.max(0.05, roundWidthMeters(parseFloat(val) || 1.2));
+          doorNodes.forEach(n => n.width = w);
+          commitHistory();
+          render();
+        }, doorNodes.length !== selNodes.length, '0.05'));
       }
 
       propsContent.appendChild(section);
@@ -2278,6 +2745,7 @@
       const commonTypeId = getCommonValue(selConns, c => c.typeId);
       section.appendChild(createPropSelect('Type', state.connTypes, commonTypeId, (val) => {
         selConns.forEach(c => c.typeId = val);
+        commitHistory();
         render();
       }));
 
@@ -2288,6 +2756,7 @@
         const clamped = Math.max(0.05, widthVal);
         selConns.forEach(c => c.width = clamped);
         recalcFireSafety();
+        commitHistory();
         render();
       }, false, '0.05'));
 
@@ -2307,6 +2776,7 @@
             c.distanceManual = true;
           });
           recalcFireSafety();
+          commitHistory();
           render();
           updatePropertiesPanel();
         }
@@ -2327,6 +2797,7 @@
                 if (src && tgt) c.distance = roundDistanceMeters(dist(src, tgt) / PIXELS_PER_METER);
               });
               recalcFireSafety();
+              commitHistory();
               updatePropertiesPanel();
               render();
             };
