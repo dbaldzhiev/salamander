@@ -912,10 +912,135 @@
     }
 
     drawSelectionBox();
+    drawCanvasInfoOverlay(w, h);
     drawMetadataOverlay(w, h);
 
     // Update Table
     renderTable();
+  }
+
+  function computeGraphBoundsWorld(nodes = state.nodes) {
+    if (!Array.isArray(nodes) || nodes.length === 0) {
+      return {
+        minX: 0,
+        maxX: 0,
+        minY: 0,
+        maxY: 0,
+        widthPx: 0,
+        heightPx: 0,
+        widthM: 0,
+        heightM: 0,
+      };
+    }
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    nodes.forEach((n) => {
+      minX = Math.min(minX, n.x);
+      maxX = Math.max(maxX, n.x);
+      minY = Math.min(minY, n.y);
+      maxY = Math.max(maxY, n.y);
+    });
+
+    const widthPx = Math.max(0, maxX - minX);
+    const heightPx = Math.max(0, maxY - minY);
+    return {
+      minX,
+      maxX,
+      minY,
+      maxY,
+      widthPx,
+      heightPx,
+      widthM: roundDistanceMeters(widthPx / PIXELS_PER_METER),
+      heightM: roundDistanceMeters(heightPx / PIXELS_PER_METER),
+    };
+  }
+
+  function getCanvasInsights() {
+    const bounds = computeGraphBoundsWorld(state.nodes);
+    const counts = {
+      start: 0,
+      start2: 0,
+      exit: 0,
+      door: 0,
+      waypoint: 0,
+      other: 0,
+    };
+
+    state.nodes.forEach((n) => {
+      if (Object.prototype.hasOwnProperty.call(counts, n.typeId)) counts[n.typeId] += 1;
+      else counts.other += 1;
+    });
+
+    const totalPeople = state.nodes.reduce((acc, n) => {
+      if (n.typeId === 'start' || n.typeId === 'start2') return acc + (Number(n.people) || 0);
+      return acc;
+    }, 0);
+
+    const blockedCount = state.connections.filter(c => c.congestion === 'blocked').length;
+    const queueCount = state.connections.filter(c => c.flowState && c.flowState.hasQueue).length;
+    const bottleneckCount = state.connections.filter(c => c.congestion === 'blocked' || (c.flowState && c.flowState.hasQueue)).length;
+    const pinnedCount = state.nodes.reduce((sum, n) => sum + (n.pinned ? 1 : 0), 0);
+    const exits = state.nodes.filter(n => n.typeId === 'exit');
+    const criticalExits = exits.filter(n => Math.abs((Number(n.maxTime) || 0) - (Number(state.totalEvacuationTime) || 0)) < 0.01).length;
+    const modeLabel = tool === 'addNode' ? 'Add Node' :
+      tool === 'addDoor' ? 'Add Door' :
+        tool === 'connect' ? 'Connect' :
+          tool === 'delete' ? 'Delete' : 'Select';
+    const methodLabel = state.calculationMethod === 'B' ? 'Method B' : 'Method A';
+
+    return {
+      bounds,
+      counts,
+      totalPeople,
+      blockedCount,
+      queueCount,
+      bottleneckCount,
+      pinnedCount,
+      criticalExits,
+      modeLabel,
+      methodLabel,
+      selectedCount: selectedItems.size,
+      connectionCount: state.connections.length,
+      totalTime: state.totalEvacuationTime || 0,
+    };
+  }
+
+  function drawCanvasInfoOverlay(w, h) {
+    const info = getCanvasInsights();
+    const projectName = (state.metadata && state.metadata.project) ? state.metadata.project : 'Untitled';
+    const lines = [
+      `Project: ${projectName} | Method: ${info.methodLabel}`,
+      `Mode: ${info.modeLabel} | Order Graph: ${orderGraphEnabled ? 'ON' : 'OFF'} | Zoom: ${Math.round(cam.zoom * 100)}%`,
+      `Nodes: ${state.nodes.length} (Start ${info.counts.start + info.counts.start2}, Exit ${info.counts.exit}, Door ${info.counts.door}, Waypoint ${info.counts.waypoint}, Pinned ${info.pinnedCount})`,
+      `Connections: ${info.connectionCount} | Bottlenecks: ${info.bottleneckCount} | Blocked: ${info.blockedCount} | Queues: ${info.queueCount}`,
+      `Total People: ${info.totalPeople} | Evac Time: ${info.totalTime.toFixed(3)} min | Critical Exits: ${info.criticalExits}`,
+      `Graph Size: ${info.bounds.widthM.toFixed(2)}m x ${info.bounds.heightM.toFixed(2)}m | Selection: ${info.selectedCount} item${info.selectedCount === 1 ? '' : 's'}`,
+    ];
+
+    ctx.save();
+    ctx.font = '12px Inter, sans-serif';
+    const padding = 10;
+    const lineHeight = 16;
+    const boxW = Math.max(...lines.map(line => ctx.measureText(line).width), 340) + padding * 2;
+    const boxH = lines.length * lineHeight + padding * 2;
+    const x = 14;
+    const y = h - boxH - 14;
+
+    ctx.fillStyle = 'rgba(22,27,34,0.92)';
+    ctx.strokeStyle = 'rgba(48,54,61,0.95)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, boxW, boxH, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#e6edf3';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    lines.forEach((line, idx) => {
+      ctx.fillText(line, x + padding, y + padding + idx * lineHeight);
+    });
+    ctx.restore();
   }
 
   function drawMetadataOverlay(w, h) {
@@ -2799,313 +2924,955 @@
   // ─── Report Generation ────────────────────────────────────
   const reportModal = document.getElementById('report-modal');
   const btnReport = document.getElementById('btnReport');
+  const btnRefreshReport = document.getElementById('btnRefreshReport');
+  const btnExportReportPdf = document.getElementById('btnExportReportPdf');
   const btnCloseReport = document.getElementById('btnCloseReport');
   const repTotalTime = document.getElementById('repTotalTime');
   const repTotalPeople = document.getElementById('repTotalPeople');
   const repCriticalPath = document.getElementById('repCriticalPath');
+  const repConnCount = document.getElementById('repConnCount');
+  const repBottlenecks = document.getElementById('repBottlenecks');
+  const repGraphSize = document.getElementById('repGraphSize');
+  const repMethod = document.getElementById('repMethod');
+  const repGeneratedAt = document.getElementById('repGeneratedAt');
+  const reportExecutiveSummary = document.getElementById('reportExecutiveSummary');
+  const reportMetaGrid = document.getElementById('reportMetaGrid');
   const reportTableBody = document.getElementById('reportTableBody');
   const mathProofContent = document.getElementById('mathProofContent');
   const reportCanvas = document.getElementById('reportCanvas');
   const repCtx = reportCanvas && reportCanvas.getContext('2d'); // Check existence
+  let lastReportContext = null;
 
-  if (btnReport) btnReport.addEventListener('click', showReport);
+  if (btnReport) btnReport.addEventListener('click', () => showReport(true));
+  if (btnRefreshReport) btnRefreshReport.addEventListener('click', () => showReport(true));
+  if (btnExportReportPdf) btnExportReportPdf.addEventListener('click', exportReportPdf);
   if (btnCloseReport) btnCloseReport.addEventListener('click', () => reportModal.style.display = 'none');
   if (reportModal) reportModal.addEventListener('click', (e) => {
     if (e.target === reportModal) reportModal.style.display = 'none';
   });
 
-  function showReport() {
-    reportModal.style.display = 'flex';
-    generateReportSummary();
-    generateReportDiagram();
-    generateReportTable();
-    generateMathProof();
+  // Report implementation
+
+  function formatDateTimeForDisplay(rawValue) {
+    if (!rawValue) return '-';
+    const normalized = String(rawValue).trim();
+    if (!normalized) return '-';
+
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)) {
+      return normalized.replace('T', ' ');
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+      return `${normalized} 00:00`;
+    }
+
+    const d = new Date(normalized);
+    if (Number.isNaN(d.getTime())) return normalized;
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   }
 
-  function generateReportSummary() {
-    // Total Time
-    repTotalTime.textContent = state.totalEvacuationTime.toFixed(3);
-
-    // Total People (sum of people at Start nodes)
-    const totalPeople = state.nodes.reduce((acc, n) => {
-      if (['start', 'start2'].includes(n.typeId)) return acc + (n.people || 0);
-      return acc;
-    }, 0);
-    repTotalPeople.textContent = totalPeople;
-
-    // Critical Path Nodes (nodes with maxTime equal to totalTime)
-    // This is a naive check, ideally we trace back from exit
-    const criticalNodes = state.nodes.filter(n => Math.abs(n.maxTime - state.totalEvacuationTime) < 0.01);
-    repCriticalPath.textContent = criticalNodes.length;
+  function formatNumeric(value, digits = 2, fallback = '-') {
+    const v = Number(value);
+    if (!Number.isFinite(v)) return fallback;
+    return v.toFixed(digits);
   }
 
-  function generateReportDiagram() {
-    // 1. Calculate bounding box
-    if (state.nodes.length === 0) return;
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    state.nodes.forEach(n => {
-      minX = Math.min(minX, n.x - NODE_RADIUS);
-      maxX = Math.max(maxX, n.x + NODE_RADIUS);
-      minY = Math.min(minY, n.y - NODE_RADIUS);
-      maxY = Math.max(maxY, n.y + NODE_RADIUS);
+  function formatSignedNumeric(value, digits = 2, fallback = '-') {
+    const v = Number(value);
+    if (!Number.isFinite(v)) return fallback;
+    const prefix = v > 0 ? '+' : '';
+    return `${prefix}${v.toFixed(digits)}`;
+  }
+
+  function connectionDirectionLabel(direction) {
+    const dir = direction || 'forward';
+    if (dir === 'backward') return '<-';
+    if (dir === 'both') return '<->';
+    return '->';
+  }
+
+  function connectionSeverityLabel(severity) {
+    if (severity === 'blocked') return 'Blocked';
+    if (severity === 'very_high') return 'Very High';
+    if (severity === 'high') return 'High';
+    if (severity === 'medium') return 'Medium';
+    return 'None';
+  }
+
+  function getConnectionSeverity(conn, q, qMax, density) {
+    if ((conn.congestion || 'none') === 'blocked') return 'blocked';
+    if (conn.flowState && conn.flowState.hasQueue) return 'very_high';
+
+    if (Number.isFinite(q) && Number.isFinite(qMax) && qMax > 0) {
+      const ratio = q / qMax;
+      if (ratio >= 0.95) return 'very_high';
+      if (ratio >= 0.8) return 'high';
+      if (ratio >= 0.6) return 'medium';
+      return 'none';
+    }
+
+    if (Number.isFinite(density)) {
+      if (density >= 5) return 'very_high';
+      if (density >= 3.5) return 'high';
+      if (density >= 2) return 'medium';
+    }
+    return 'none';
+  }
+
+  function buildReportContext(refreshGeneratedAt = true) {
+    recalcPeopleCounts();
+
+    const nodeMap = new Map(state.nodes.map(n => [n.id, n]));
+    const connTypeMap = new Map(state.connTypes.map(t => [t.id, t]));
+    const bounds = computeGraphBoundsWorld(state.nodes);
+    const metadata = normalizeMetadata(state.metadata);
+
+    const generatedAtRaw = (refreshGeneratedAt || !lastReportContext || !lastReportContext.generatedAtRaw)
+      ? new Date().toISOString()
+      : lastReportContext.generatedAtRaw;
+
+    const nodeCounts = {
+      start: 0,
+      start2: 0,
+      exit: 0,
+      normal: 0,
+      waypoint: 0,
+      door: 0,
+      other: 0,
+      pinned: 0,
+    };
+
+    state.nodes.forEach((n) => {
+      if (Object.prototype.hasOwnProperty.call(nodeCounts, n.typeId)) nodeCounts[n.typeId] += 1;
+      else nodeCounts.other += 1;
+      if (n.pinned) nodeCounts.pinned += 1;
     });
 
-    // Add padding
-    const padding = 100;
-    minX -= padding; maxX += padding;
-    minY -= padding; maxY += padding;
+    const totalPeople = state.nodes.reduce((sum, n) => (
+      SOURCE_TYPES.includes(n.typeId) ? sum + (Number(n.people) || 0) : sum
+    ), 0);
 
-    const width = maxX - minX;
-    const height = maxY - minY;
+    const exits = state.nodes.filter(n => n.typeId === 'exit');
+    const totalTime = Number(state.totalEvacuationTime) || 0;
+    const criticalExits = exits.filter(e => Math.abs((Number(e.maxTime) || 0) - totalTime) < 0.01);
 
-    // 2. Setup canvas
-    reportCanvas.width = width;
-    reportCanvas.height = height;
+    const sortedConns = [...state.connections].sort((a, b) => {
+      const srcA = nodeMap.get(a.sourceId);
+      const srcB = nodeMap.get(b.sourceId);
+      const srcTimeA = srcA ? (Number(srcA.maxTime) || 0) : 0;
+      const srcTimeB = srcB ? (Number(srcB.maxTime) || 0) : 0;
+      if (srcTimeA !== srcTimeB) return srcTimeA - srcTimeB;
 
-    // 3. Render
-    // We need a temp camera to shift origin
-    const originalCam = { ...cam };
-    cam = { x: -minX, y: -minY, zoom: 1 }; // Reset zoom to 1, shift to top-left
+      const tgtA = nodeMap.get(a.targetId);
+      const tgtB = nodeMap.get(b.targetId);
+      const tgtTimeA = tgtA ? (Number(tgtA.maxTime) || 0) : 0;
+      const tgtTimeB = tgtB ? (Number(tgtB.maxTime) || 0) : 0;
+      if (tgtTimeA !== tgtTimeB) return tgtTimeA - tgtTimeB;
+      return (a.id || 0) - (b.id || 0);
+    });
 
-    // Clear
-    repCtx.fillStyle = '#161b22';
-    repCtx.fillRect(0, 0, width, height);
-
-    // Draw Grid (custom for report)
-    repCtx.beginPath();
-    repCtx.strokeStyle = 'rgba(48,54,61,.4)';
-    repCtx.lineWidth = 1;
-    for (let x = 0; x <= width; x += 100) {
-      repCtx.moveTo(x, 0); repCtx.lineTo(x, height);
-    }
-    for (let y = 0; y <= height; y += 100) {
-      repCtx.moveTo(0, y); repCtx.lineTo(width, y);
-    }
-    repCtx.stroke();
-
-    // Use existing draw functions but patch ctx temporarily? 
-    // Easier to just copy relevant draw logic or refactor. 
-    // Let's refactor drawNode/drawConnection to take a context and cam, OR just use the global ctx after swapping canvas?
-    // Swapping canvas is risky with event listeners.
-    // Let's write simple render logic here to be safe and clean.
-
-    state.connections.forEach(c => {
-      const src = state.nodes.find(n => n.id === c.sourceId);
-      const tgt = state.nodes.find(n => n.id === c.targetId);
+    const rows = [];
+    sortedConns.forEach((conn, idx) => {
+      const src = nodeMap.get(conn.sourceId);
+      const tgt = nodeMap.get(conn.targetId);
       if (!src || !tgt) return;
 
-      const sx = src.x - minX; const sy = src.y - minY;
-      const ex = tgt.x - minX; const ey = tgt.y - minY;
+      const ct = connTypeMap.get(conn.typeId) || { name: conn.typeId || 'normal', color: '#8b949e', dash: [] };
+      const limits = getLimitParams(conn.typeId);
 
-      repCtx.beginPath();
-      repCtx.strokeStyle = '#58a6ff';
-      repCtx.lineWidth = Math.max(2, (c.width || 1.2) * PIXELS_PER_METER); // Scale width for visibility
-      repCtx.moveTo(sx, sy);
-      repCtx.lineTo(ex, ey);
-      repCtx.stroke();
+      const connDist = Number(conn.distance);
+      const length = Number.isFinite(connDist) && connDist >= 0
+        ? roundDistanceMeters(connDist)
+        : roundDistanceMeters(dist(src, tgt) / PIXELS_PER_METER);
 
-      // Arrow
-      const angle = Math.atan2(ey - sy, ex - sx);
-      repCtx.beginPath();
-      repCtx.fillStyle = '#58a6ff';
-      repCtx.arc(ex - Math.cos(angle) * 30, ey - Math.sin(angle) * 30, 5, 0, Math.PI * 2);
-      repCtx.fill();
+      const desiredRaw = Number(conn.desiredDistance);
+      const desiredLength = Number.isFinite(desiredRaw) && desiredRaw > 0 ? roundDistanceMeters(desiredRaw) : null;
+      const deltaLength = desiredLength === null ? null : roundDistanceMeters(length - desiredLength);
+
+      const width = Math.max(0.05, roundWidthMeters(Number(conn.width) || 1.2));
+      const stats = conn.calcStats || {};
+      const flow = conn.flowState || {};
+      const dyn = conn.dynamicStats || {};
+
+      const density = Number.isFinite(Number(stats.density)) ? Number(stats.density) : 0;
+      const q = Number.isFinite(Number(stats.q)) ? Number(stats.q) : (Number(flow.q_spec) || 0);
+      const Q = Number.isFinite(Number(stats.Q))
+        ? Number(stats.Q)
+        : (Number(flow.Q_out) || Number(flow.Q_in) || 0);
+
+      const qMax = Number.isFinite(Number(stats.q_max)) ? Number(stats.q_max) : (Number(limits.q_max) || 0);
+      const qGran = Number.isFinite(Number(stats.q_gran)) ? Number(stats.q_gran) : (Number(limits.q_gran) || 0);
+      const vGran = Number.isFinite(Number(stats.v_gran)) ? Number(stats.v_gran) : (Number(limits.v_gran) || 0);
+
+      let speed = Number(stats.v);
+      if (!Number.isFinite(speed) || speed <= 0) speed = vGran > 0 ? vGran : 0;
+
+      let time = Number(stats.time);
+      if (!Number.isFinite(time) || time < 0) time = Number(conn.travelTime) || 0;
+
+      const severity = getConnectionSeverity(conn, q, qMax, density);
+      const rowClass = (severity === 'blocked' || severity === 'very_high')
+        ? 'report-row-risk'
+        : (severity === 'high' || severity === 'medium' ? 'report-row-warning' : '');
+
+      const peopleIn = Number.isFinite(Number(dyn.N_total))
+        ? Number(dyn.N_total)
+        : (Number(src.people) || 0);
+
+      rows.push({
+        step: idx + 1,
+        connId: conn.id,
+        conn,
+        src,
+        tgt,
+        fromName: src.name || `Node ${src.id}`,
+        toName: tgt.name || `Node ${tgt.id}`,
+        typeName: ct.name || conn.typeId || 'normal',
+        typeColor: ct.color || '#8b949e',
+        typeDash: Array.isArray(ct.dash) ? ct.dash : [],
+        direction: conn.direction || 'forward',
+        directionLabel: connectionDirectionLabel(conn.direction || 'forward'),
+        length,
+        desiredLength,
+        deltaLength,
+        width,
+        peopleIn,
+        density,
+        q,
+        Q,
+        qMax,
+        qGran,
+        speed,
+        vGran,
+        time,
+        hasQueue: !!(flow.hasQueue),
+        severity,
+        severityLabel: connectionSeverityLabel(severity),
+        congestionRaw: conn.congestion || 'none',
+        dynamicStats: dyn,
+        rowClass,
+      });
     });
 
-    state.nodes.forEach(n => {
-      const x = n.x - minX;
-      const y = n.y - minY;
+    const bottleneckCount = rows.filter(r => r.severity === 'blocked' || r.severity === 'very_high' || r.hasQueue).length;
+    const blockedCount = rows.filter(r => r.severity === 'blocked').length;
+    const queueCount = rows.filter(r => r.hasQueue).length;
+    const totalLength = rows.reduce((sum, r) => sum + (Number(r.length) || 0), 0);
+    const avgWidth = rows.length > 0 ? rows.reduce((sum, r) => sum + (Number(r.width) || 0), 0) / rows.length : 0;
+    const avgDensity = rows.length > 0 ? rows.reduce((sum, r) => sum + (Number(r.density) || 0), 0) / rows.length : 0;
+    const avgSpeed = rows.length > 0 ? rows.reduce((sum, r) => sum + (Number(r.speed) || 0), 0) / rows.length : 0;
 
-      repCtx.beginPath();
-      repCtx.arc(x, y, NODE_RADIUS, 0, Math.PI * 2);
-      repCtx.fillStyle = '#21262d';
-      repCtx.fill();
-      repCtx.strokeStyle = '#e6edf3';
-      repCtx.lineWidth = 2;
-      repCtx.stroke();
+    const maxTimeRow = rows.reduce((best, row) => (!best || row.time > best.time ? row : best), null);
+    const maxDensityRow = rows.reduce((best, row) => (!best || row.density > best.density ? row : best), null);
 
-      repCtx.fillStyle = '#e6edf3';
-      repCtx.font = '24px Inter';
+    const graphSizeLabel = `${formatNumeric(bounds.widthM, 2, '0.00')} m x ${formatNumeric(bounds.heightM, 2, '0.00')} m`;
+    const methodLabel = state.calculationMethod === 'B'
+      ? 'Method B - Capacity/Throughput'
+      : 'Method A - Travel Speed';
+
+    return {
+      generatedAtRaw,
+      generatedAtDisplay: formatDateTimeForDisplay(generatedAtRaw),
+      metadata,
+      bounds,
+      graphSizeLabel,
+      methodLabel,
+      totalPeople,
+      totalTime,
+      criticalExits,
+      nodeCounts,
+      rows,
+      connectionCount: rows.length,
+      bottleneckCount,
+      blockedCount,
+      queueCount,
+      totalLength,
+      avgWidth,
+      avgDensity,
+      avgSpeed,
+      maxTimeRow,
+      maxDensityRow,
+      orderGraphEnabled: !!orderGraphEnabled,
+      zoomPercent: Math.round(cam.zoom * 100),
+    };
+  }
+
+  function showReport(refreshGeneratedAt = true) {
+    if (!reportModal) return;
+    reportModal.style.display = 'flex';
+    const report = buildReportContext(refreshGeneratedAt);
+    lastReportContext = report;
+    generateReportSummary(report);
+    generateReportDiagram(report);
+    generateReportTable(report);
+    generateMathProof(report);
+  }
+
+  function generateReportSummary(report = lastReportContext) {
+    if (!report) return;
+
+    if (repTotalTime) repTotalTime.textContent = formatNumeric(report.totalTime, 3, '0.000');
+    if (repTotalPeople) repTotalPeople.textContent = String(Math.round(report.totalPeople));
+    if (repCriticalPath) repCriticalPath.textContent = String(report.criticalExits.length);
+    if (repConnCount) repConnCount.textContent = String(report.connectionCount);
+    if (repBottlenecks) repBottlenecks.textContent = String(report.bottleneckCount);
+    if (repGraphSize) repGraphSize.textContent = report.graphSizeLabel;
+    if (repMethod) repMethod.textContent = report.methodLabel;
+    if (repGeneratedAt) repGeneratedAt.textContent = report.generatedAtDisplay;
+
+    const longest = report.maxTimeRow
+      ? `Connection #${report.maxTimeRow.connId} (${report.maxTimeRow.fromName} -> ${report.maxTimeRow.toName}) at ${formatNumeric(report.maxTimeRow.time, 3, '0.000')} min`
+      : 'No segment data is available yet.';
+    const densest = report.maxDensityRow
+      ? `Connection #${report.maxDensityRow.connId} has the highest density at ${formatNumeric(report.maxDensityRow.density, 2)} p/m2`
+      : 'No density data available.';
+
+    const riskLine = report.bottleneckCount > 0
+      ? `${report.bottleneckCount} bottleneck segments were found (${report.blockedCount} blocked, ${report.queueCount} with queues).`
+      : 'No bottlenecks or blocked segments were detected.';
+
+    if (reportExecutiveSummary) {
+      reportExecutiveSummary.innerHTML = [
+        `<p><strong>Outcome:</strong> Total evacuation time is <strong>${formatNumeric(report.totalTime, 3, '0.000')} min</strong> for <strong>${Math.round(report.totalPeople)}</strong> people using <strong>${escHtml(report.methodLabel)}</strong>.</p>`,
+        `<p><strong>Risk Profile:</strong> ${escHtml(riskLine)} ${escHtml(densest)}.</p>`,
+        `<p><strong>Geometry:</strong> The graph covers <strong>${escHtml(report.graphSizeLabel)}</strong> with ${report.rows.length} modeled connections. Longest segment time contribution: ${escHtml(longest)}.</p>`,
+      ].join('');
+    }
+
+    if (reportMetaGrid) {
+      const meta = report.metadata || {};
+      const metaItems = [
+        ['Project', meta.project || 'Untitled'],
+        ['Author', meta.author || '-'],
+        ['Company', meta.company || '-'],
+        ['Scenario Date/Time', formatDateTimeForDisplay(meta.dateTime)],
+        ['Created', formatDateTimeForDisplay(meta.createdAt)],
+        ['Exported', formatDateTimeForDisplay(meta.exportedAt)],
+        ['Salamander Version', meta.salamanderVersion || SALAMANDER_VERSION],
+        ['Nodes', `${state.nodes.length} (Start ${report.nodeCounts.start + report.nodeCounts.start2}, Exit ${report.nodeCounts.exit}, Door ${report.nodeCounts.door}, Waypoint ${report.nodeCounts.waypoint})`],
+        ['Pinned Nodes', String(report.nodeCounts.pinned)],
+        ['Total Connection Length', `${formatNumeric(report.totalLength, 2, '0.00')} m`],
+        ['Average Width', `${formatNumeric(report.avgWidth, 2, '0.00')} m`],
+        ['Average Density', `${formatNumeric(report.avgDensity, 2, '0.00')} p/m2`],
+        ['Average Speed', `${formatNumeric(report.avgSpeed, 2, '0.00')} m/min`],
+        ['Ordering', report.orderGraphEnabled ? 'Enabled' : 'Disabled'],
+      ];
+
+      reportMetaGrid.innerHTML = metaItems.map(([label, value]) => `
+        <div class="report-meta-item">
+          <div class="report-meta-label">${escHtml(label)}</div>
+          <div class="report-meta-value">${escHtml(value)}</div>
+        </div>
+      `).join('');
+    }
+  }
+
+  function generateReportDiagram(report = lastReportContext) {
+    if (!reportCanvas || !repCtx || !report) return;
+
+    const containerEl = reportCanvas.parentElement;
+    const cssW = Math.max(900, Math.round((containerEl ? containerEl.clientWidth : 900) - 2));
+    const cssH = Math.max(460, Math.round((containerEl ? containerEl.clientHeight : 470) - 2));
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+
+    reportCanvas.width = Math.round(cssW * dpr);
+    reportCanvas.height = Math.round(cssH * dpr);
+    reportCanvas.style.width = `${cssW}px`;
+    reportCanvas.style.height = `${cssH}px`;
+
+    repCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    repCtx.clearRect(0, 0, cssW, cssH);
+
+    const bg = repCtx.createLinearGradient(0, 0, 0, cssH);
+    bg.addColorStop(0, '#0d1117');
+    bg.addColorStop(1, '#111827');
+    repCtx.fillStyle = bg;
+    repCtx.fillRect(0, 0, cssW, cssH);
+
+    if (state.nodes.length === 0) {
+      repCtx.fillStyle = '#9ca3af';
+      repCtx.font = '600 16px Inter, sans-serif';
       repCtx.textAlign = 'center';
       repCtx.textBaseline = 'middle';
-      repCtx.fillText(n.name || n.id, x, y);
-    });
-
-    // Restore cam
-    cam = originalCam;
-  }
-
-  function generateReportTable() {
-    let html = '';
-    let step = 1;
-
-    // Simple sorting: by maxTime (approximate sequence from start)
-    const sortedConns = [...state.connections].sort((a, b) => {
-      const srcA = state.nodes.find(n => n.id === a.sourceId);
-      const srcB = state.nodes.find(n => n.id === b.sourceId);
-      return (srcA?.maxTime || 0) - (srcB?.maxTime || 0);
-    });
-
-    sortedConns.forEach(c => {
-      const src = state.nodes.find(n => n.id === c.sourceId);
-      const tgt = state.nodes.find(n => n.id === c.targetId);
-      if (!src || !tgt) return;
-
-      const stats = c.calcStats || { density: 0, v: 0, time: 0 };
-
-      html += `<tr>
-        <td>${step++}</td>
-        <td>${escHtml(src.name || src.id)}</td>
-        <td>${escHtml(tgt.name || tgt.id)}</td>
-        <td>${c.typeId}</td>
-        <td>${c.distance.toFixed(2)}</td>
-        <td>${(c.width || 1.2).toFixed(2)}</td>
-        <td>${stats.density.toFixed(2)}</td>
-        <td>${stats.v.toFixed(2)}</td>
-        <td>${stats.time.toFixed(2)}</td>
-      </tr>`;
-    });
-    reportTableBody.innerHTML = html;
-  }
-
-  function generateMathProof() {
-    let text = "DETAILED MATHEMATICAL PROOF\n";
-
-    if (state.calculationMethod === 'B') {
-      text += "CALCULATION METHOD: B (Capacity / Throughput)\n";
-      text += "- Formula: Time = Number of People / Capacity\n";
-      text += "- Capacity (Q) = Specific Throughput (q) * Width (w)\n";
-    } else {
-      text += "CALCULATION METHOD: A (Travel Speed)\n";
-      text += "- Formula: Time = Length / Speed\n";
+      repCtx.fillText('No graph data to render', cssW / 2, cssH / 2);
+      return;
     }
-    text += "======================================\n\n";
-    text += "ASSUMPTIONS & CONSTANTS:\n";
-    text += "- Regulation Source: Ordinance Iz-1971, Annex 8a\n";
-    text += "- Table 11 Used for Flow Parameters (v, q) based on Density (D)\n\n";
 
-    text += "STEP-BY-STEP CALCULATION:\n\n";
+    const bounds = report.bounds;
+    const pad = 56;
+    const spanW = Math.max(1, bounds.widthPx);
+    const spanH = Math.max(1, bounds.heightPx);
+    const usableW = Math.max(1, cssW - pad * 2);
+    const usableH = Math.max(1, cssH - pad * 2);
+    const scale = Math.max(0.001, Math.min(usableW / spanW, usableH / spanH));
+    const drawW = spanW * scale;
+    const drawH = spanH * scale;
+    const offsetX = pad + (usableW - drawW) * 0.5;
+    const offsetY = pad + (usableH - drawH) * 0.5;
 
-    // Trace path
-    const sortedConns = [...state.connections].sort((a, b) => {
-      const srcA = state.nodes.find(n => n.id === a.sourceId);
-      const srcB = state.nodes.find(n => n.id === b.sourceId);
-      return (srcA?.maxTime || 0) - (srcB?.maxTime || 0);
+    const toPoint = (n) => ({
+      x: offsetX + (n.x - bounds.minX) * scale,
+      y: offsetY + (n.y - bounds.minY) * scale,
     });
 
-    sortedConns.forEach(c => {
-      const src = state.nodes.find(n => n.id === c.sourceId);
-      const tgt = state.nodes.find(n => n.id === c.targetId);
-      if (!src || !tgt) return;
+    const meterStepWorld = PIXELS_PER_METER;
+    const meterStepPx = meterStepWorld * scale;
+    if (meterStepPx >= 10) {
+      repCtx.beginPath();
+      repCtx.strokeStyle = 'rgba(107,114,128,0.22)';
+      repCtx.lineWidth = 1;
+      const gx0 = Math.floor(bounds.minX / meterStepWorld) * meterStepWorld;
+      const gy0 = Math.floor(bounds.minY / meterStepWorld) * meterStepWorld;
+      for (let gx = gx0; gx <= bounds.maxX + meterStepWorld; gx += meterStepWorld) {
+        const x = offsetX + (gx - bounds.minX) * scale;
+        repCtx.moveTo(x, offsetY);
+        repCtx.lineTo(x, offsetY + drawH);
+      }
+      for (let gy = gy0; gy <= bounds.maxY + meterStepWorld; gy += meterStepWorld) {
+        const y = offsetY + (gy - bounds.minY) * scale;
+        repCtx.moveTo(offsetX, y);
+        repCtx.lineTo(offsetX + drawW, y);
+      }
+      repCtx.stroke();
+    }
 
-      const stats = c.calcStats;
-      if (!stats) return;
+    const severityColor = {
+      none: '#58a6ff',
+      medium: '#e3b341',
+      high: '#d29922',
+      very_high: '#f0883e',
+      blocked: '#f85149',
+    };
 
-      text += `SEGMENT [${src.name || src.id}] -> [${tgt.name || tgt.id}]:\n`;
-      text += `  1. Geometry:\n`;
-      text += `     - Length (ℓ) = ${c.distance.toFixed(2)} m\n`;
-      text += `     - Width (δ)  = ${(c.width || 1.2).toFixed(2)} m\n`;
+    report.rows.forEach((row) => {
+      const s = toPoint(row.src);
+      const t = toPoint(row.tgt);
+      const dx = t.x - s.x;
+      const dy = t.y - s.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 1e-6) return;
 
-      const width = c.width || 1.2;
+      const lineColor = row.severity === 'none' ? (row.typeColor || severityColor.none) : severityColor[row.severity];
+      const lineWidth = Math.max(1.8, Math.min(20, row.width * PIXELS_PER_METER * scale));
 
-      if (state.calculationMethod === 'B') {
-        const fs = c.flowState || { Q_in: 0, q_spec: 0, hasQueue: false };
-
-        text += `  2. Flow Analysis (Specific Throughput Capacity):\n`;
-
-        // Define flow sources more formally
-        const isStart = src.typeId === 'start' || src.typeId === 'start2';
-        if (isStart) {
-          text += `     - Initial Segment: Flow derived from Population Density (D = N/A)\n`;
-          text += `     - Generated Flow (Q) = ${(fs.Q_in || 0).toFixed(2)} p/min\n`;
-        } else {
-          text += `     - Incoming Flow from Upstream (Q_in = Σ Q_prev) = ${(fs.Q_in || 0).toFixed(2)} p/min\n`;
-        }
-
-        text += `     - Specific Throughput Capacity (q = Q / δ) = ${(fs.q_spec || 0).toFixed(2)} p/m/min\n`;
-
-        text += `  3. Bottleneck Verification (Queue Formulation):\n`;
-        text += `     - Max Permissible Specific Throughput (q_max) = ${stats.q_max} p/m/min (from Table 11)\n`;
-
-        if (fs.hasQueue) {
-          text += `     - VERIFICATION: q > q_max (${(fs.q_spec || 0).toFixed(2)} > ${stats.q_max})\n`;
-          text += `     - STATUS: CONGESTION DETECTED. Queue formation is inevitable.\n`;
-          text += `     - CONSEQUENCE: Movement is restricted to Boundary Parameters:\n`;
-          text += `       * Boundary Specific Throughput (q_gran) = ${stats.q_gran} p/m/min\n`;
-          text += `       * Boundary Speed (v_gran) = ${stats.v_gran || 10} m/min\n`;
-        } else {
-          text += `     - VERIFICATION: q ≤ q_max (${(fs.q_spec || 0).toFixed(2)} ≤ ${stats.q_max})\n`;
-          text += `     - STATUS: NORMAL FLOW. No significant queue formation.\n`;
-        }
-
-        text += `  4. Evacuation Time Calculation (τ):\n`;
-        if (fs.hasQueue) {
-          // Formula 2 (Norm 2) with I.11
-          const ds = c.dynamicStats || { N_total: 0, v_density: 0, density: 0, t_filling: 0, N_out: 0, N_eff: 0 };
-          const Q_out = width * stats.q_gran;
-          const Q_in = fs.Q_in || 0;
-
-          text += `     - Methodology: "Time for Queued Flow" (Norm 2, Formula 2)\n`;
-          text += `     - Clause I.11 Application (Dynamic Reduction):\n`;
-          text += `       * Total People (N_total) = ${ds.N_total}\n`;
-          text += `       * Density Based Speed (v_d) = ${ds.v_density.toFixed(2)} m/min (at D=${ds.density.toFixed(2)})\n`;
-          text += `       * Time to Cross / Fill (t_fill) = ℓ / v_d = ${ds.t_filling.toFixed(4)} min\n`;
-          text += `       * Escaped People (N_out) = Q_gran * t_fill = ${Q_out.toFixed(2)} * ${ds.t_filling.toFixed(4)} = ${ds.N_out.toFixed(2)}\n`;
-          text += `       * Effective People (N_eff) = max(0, N_total - N_out) = ${ds.N_eff.toFixed(2)}\n`;
-
-          text += `     - Formula: τ = ℓ / v_gran + N_eff * (1/Q_out - 1/Q_in)\n`;
-          text += `       where Q_out = δ * q_gran = ${(Q_out).toFixed(2)} p/min\n`;
-
-          text += `     - Term 1: Travel Time (l/v_gran)\n`;
-          text += `       = ${c.distance.toFixed(2)} / ${stats.v_gran || 10} = ${(c.distance / (stats.v_gran || 10)).toFixed(4)} min\n`;
-
-          const val = (1 / Q_out) - (1 / Q_in);
-          const delay = ds.N_eff * Math.max(0, val);
-
-          text += `     - Term 2: Queue Delay (N_eff * [1/Q_out - 1/Q_in])\n`;
-          text += `       = ${ds.N_eff.toFixed(2)} * [1/${Q_out.toFixed(2)} - 1/${Q_in.toFixed(2)}] = ${delay.toFixed(4)} min\n`;
-          text += `     - Total Time (τ) = ${(stats.time).toFixed(4)} min\n`;
-        } else {
-          // Formula 1
-          text += `     - Methodology: "Time for Free Flow" (Norm 2, Formula 1)\n`;
-          text += `     - Formula: τ = ℓ / v\n`;
-          text += `     - Speed (v) derived from Density Table 11 = ${stats.v.toFixed(2)} m/min\n`;
-          text += `     - Time (τ) = ${c.distance.toFixed(2)} / ${stats.v.toFixed(2)} = ${stats.time.toFixed(4)} min\n`;
-        }
-
+      repCtx.save();
+      repCtx.strokeStyle = lineColor;
+      repCtx.lineWidth = lineWidth;
+      repCtx.lineCap = 'round';
+      repCtx.globalAlpha = 0.85;
+      if (row.typeDash.length) {
+        repCtx.setLineDash(row.typeDash.map(v => Math.max(2, v * scale)));
       } else {
-        // Method A logic...
-        const area = c.distance * (c.width || 1.2);
-        const srcPeople = src.people || 0;
-        text += `  2. Flow Parameters:\n`;
-        text += `     - Density (D) = N / Area = ${srcPeople} / ${area.toFixed(2)} = ${stats.density.toFixed(2)} p/m²\n`;
-        text += `     - Based on D, Speed (v) = ${stats.v.toFixed(2)} m/min\n`;
-        text += `  3. Travel Time (τ):\n`;
-        text += `     - τ = ℓ / v = ${c.distance.toFixed(2)} / ${stats.v.toFixed(2)} = ${stats.time.toFixed(4)} min\n`;
+        repCtx.setLineDash([]);
+      }
+      repCtx.beginPath();
+      repCtx.moveTo(s.x, s.y);
+      repCtx.lineTo(t.x, t.y);
+      repCtx.stroke();
+      repCtx.restore();
+
+      if (row.severity === 'blocked') {
+        const ux = dx / len;
+        const uy = dy / len;
+        const nx = -uy;
+        const ny = ux;
+        const zigCount = Math.max(4, Math.round(len / 26));
+        const amp = Math.max(3, Math.min(10, lineWidth * 0.45));
+
+        repCtx.save();
+        repCtx.strokeStyle = '#f85149';
+        repCtx.lineWidth = Math.max(2.5, Math.min(8, lineWidth * 0.6));
+        repCtx.lineJoin = 'round';
+        repCtx.lineCap = 'round';
+        repCtx.beginPath();
+        repCtx.moveTo(s.x, s.y);
+        for (let i = 1; i < zigCount; i++) {
+          const d = (len * i) / zigCount;
+          const side = i % 2 === 0 ? -1 : 1;
+          repCtx.lineTo(s.x + ux * d + nx * side * amp, s.y + uy * d + ny * side * amp);
+        }
+        repCtx.lineTo(t.x, t.y);
+        repCtx.stroke();
+        repCtx.restore();
       }
 
-      text += `  ---------------------------------------------------\n\n`;
+      const arrowSize = Math.max(7, Math.min(15, lineWidth * 0.8));
+      const arrowInset = Math.max(6, arrowSize * 0.8);
+      const angle = Math.atan2(dy, dx);
+
+      const drawArrow = (tipX, tipY, ang) => {
+        repCtx.save();
+        repCtx.strokeStyle = lineColor;
+        repCtx.lineWidth = Math.max(1.6, lineWidth * 0.28);
+        repCtx.beginPath();
+        repCtx.moveTo(tipX, tipY);
+        repCtx.lineTo(tipX - arrowSize * Math.cos(ang - 0.42), tipY - arrowSize * Math.sin(ang - 0.42));
+        repCtx.moveTo(tipX, tipY);
+        repCtx.lineTo(tipX - arrowSize * Math.cos(ang + 0.42), tipY - arrowSize * Math.sin(ang + 0.42));
+        repCtx.stroke();
+        repCtx.restore();
+      };
+
+      if (row.direction === 'forward' || row.direction === 'both') {
+        drawArrow(t.x - Math.cos(angle) * arrowInset, t.y - Math.sin(angle) * arrowInset, angle);
+      }
+      if (row.direction === 'backward' || row.direction === 'both') {
+        drawArrow(s.x + Math.cos(angle) * arrowInset, s.y + Math.sin(angle) * arrowInset, angle + Math.PI);
+      }
+
+      const label = `#${row.connId} ${formatNumeric(row.length, 2)}m | ${formatNumeric(row.time, 3)}min`;
+      const lx = (s.x + t.x) * 0.5;
+      const ly = (s.y + t.y) * 0.5;
+      repCtx.save();
+      repCtx.font = '11px Inter, sans-serif';
+      repCtx.textAlign = 'center';
+      repCtx.textBaseline = 'middle';
+      const tw = repCtx.measureText(label).width;
+      repCtx.fillStyle = 'rgba(13,17,23,0.86)';
+      repCtx.beginPath();
+      repCtx.roundRect(lx - tw / 2 - 5, ly - 9, tw + 10, 18, 4);
+      repCtx.fill();
+      repCtx.fillStyle = '#e5e7eb';
+      repCtx.fillText(label, lx, ly);
+      repCtx.restore();
     });
 
-    text += "CRITICAL PATH ANALYSIS:\n";
-    text += "Total Evacuation Time is determined by the longest path cumulative duration.\n\n";
+    const nodeTypeMap = new Map(state.nodeTypes.map(t => [t.id, t]));
+    const nodeRadius = Math.max(5.5, Math.min(14, NODE_RADIUS * Math.sqrt(scale) * 0.9));
 
-    // Find Exit node with max time
-    const exits = state.nodes.filter(n => n.typeId === 'exit');
-    if (exits.length > 0) {
-      exits.forEach(e => {
-        text += `Exit Node [${e.name || e.id}]: Cumulative Time = ${e.maxTime.toFixed(4)} min\n`;
-      });
-      const max = Math.max(...exits.map(e => e.maxTime));
-      text += `\nFINAL RESULT: Total Evacuation Time = ${max.toFixed(3)} min\n`;
-    } else {
-      text += "No Exit nodes defined.\n";
+    state.nodes.forEach((node) => {
+      const p = toPoint(node);
+      const nt = nodeTypeMap.get(node.typeId) || { name: node.typeId, color: '#8b949e' };
+      const isDoor = node.typeId === 'door';
+
+      repCtx.save();
+      if (isDoor) {
+        const widthFactor = getDoorWidthFactor(node);
+        const halfLong = nodeRadius * 1.12 * widthFactor;
+        const halfShort = Math.max(3, nodeRadius * 0.38);
+        const angle = getDoorAxisAngle(node);
+
+        repCtx.translate(p.x, p.y);
+        repCtx.rotate(angle);
+        repCtx.beginPath();
+        repCtx.roundRect(-halfLong, -halfShort, halfLong * 2, halfShort * 2, 2.5);
+        repCtx.fillStyle = '#111827';
+        repCtx.fill();
+        repCtx.strokeStyle = nt.color || '#d29922';
+        repCtx.lineWidth = 1.8;
+        repCtx.stroke();
+      } else {
+        repCtx.beginPath();
+        repCtx.arc(p.x, p.y, nodeRadius, 0, Math.PI * 2);
+        repCtx.fillStyle = '#111827';
+        repCtx.fill();
+        repCtx.strokeStyle = nt.color || '#8b949e';
+        repCtx.lineWidth = 1.8;
+        repCtx.stroke();
+      }
+      repCtx.restore();
+
+      repCtx.save();
+      repCtx.font = `${Math.max(10, Math.min(12.5, nodeRadius * 0.95))}px Inter, sans-serif`;
+      repCtx.fillStyle = '#e5e7eb';
+      repCtx.textAlign = 'center';
+      repCtx.textBaseline = 'top';
+      repCtx.fillText(node.name || `Node ${node.id}`, p.x, p.y + nodeRadius + 4);
+      repCtx.restore();
+    });
+
+    const legendX = 16;
+    const legendY = 14;
+    const legendW = 332;
+    const legendH = 122;
+    repCtx.save();
+    repCtx.fillStyle = 'rgba(13,17,23,0.9)';
+    repCtx.strokeStyle = 'rgba(75,85,99,0.75)';
+    repCtx.lineWidth = 1;
+    repCtx.beginPath();
+    repCtx.roundRect(legendX, legendY, legendW, legendH, 8);
+    repCtx.fill();
+    repCtx.stroke();
+
+    repCtx.fillStyle = '#e5e7eb';
+    repCtx.font = '600 12px Inter, sans-serif';
+    repCtx.textAlign = 'left';
+    repCtx.textBaseline = 'top';
+    repCtx.fillText(`Method: ${report.methodLabel}`, legendX + 10, legendY + 9);
+    repCtx.fillText(`Total Time: ${formatNumeric(report.totalTime, 3)} min`, legendX + 10, legendY + 26);
+    repCtx.fillText(`People: ${Math.round(report.totalPeople)}  |  Size: ${report.graphSizeLabel}`, legendX + 10, legendY + 43);
+
+    const legItems = [
+      ['None', '#58a6ff'],
+      ['Medium', '#e3b341'],
+      ['High', '#d29922'],
+      ['Very High', '#f0883e'],
+      ['Blocked', '#f85149'],
+    ];
+    legItems.forEach((item, idx) => {
+      const y = legendY + 66 + idx * 10;
+      repCtx.strokeStyle = item[1];
+      repCtx.lineWidth = 3;
+      repCtx.beginPath();
+      repCtx.moveTo(legendX + 12, y + 4);
+      repCtx.lineTo(legendX + 34, y + 4);
+      repCtx.stroke();
+      repCtx.fillStyle = '#d1d5db';
+      repCtx.font = '10px Inter, sans-serif';
+      repCtx.fillText(item[0], legendX + 40, y);
+    });
+    repCtx.restore();
+
+    const scaleCandidates = [1, 2, 5, 10, 20];
+    let scaleMeters = 1;
+    for (const candidate of scaleCandidates) {
+      const px = candidate * PIXELS_PER_METER * scale;
+      if (px >= 60 && px <= 180) {
+        scaleMeters = candidate;
+      }
     }
-
-    mathProofContent.textContent = text;
+    const scalePx = scaleMeters * PIXELS_PER_METER * scale;
+    const barX = cssW - 190;
+    const barY = cssH - 26;
+    repCtx.save();
+    repCtx.strokeStyle = '#e5e7eb';
+    repCtx.lineWidth = 2;
+    repCtx.beginPath();
+    repCtx.moveTo(barX, barY);
+    repCtx.lineTo(barX + scalePx, barY);
+    repCtx.moveTo(barX, barY - 4);
+    repCtx.lineTo(barX, barY + 4);
+    repCtx.moveTo(barX + scalePx, barY - 4);
+    repCtx.lineTo(barX + scalePx, barY + 4);
+    repCtx.stroke();
+    repCtx.font = '11px Inter, sans-serif';
+    repCtx.fillStyle = '#e5e7eb';
+    repCtx.textAlign = 'center';
+    repCtx.textBaseline = 'bottom';
+    repCtx.fillText(`${scaleMeters} m`, barX + scalePx / 2, barY - 6);
+    repCtx.restore();
   }
 
-  // ─── Selection Logic ─────────────────────────────────────
+  function generateReportTable(report = lastReportContext) {
+    if (!reportTableBody) return;
+    if (!report || report.rows.length === 0) {
+      reportTableBody.innerHTML = '<tr><td colspan="17">No connection data available.</td></tr>';
+      return;
+    }
+
+    reportTableBody.innerHTML = report.rows.map((row) => {
+      const desiredText = row.desiredLength === null ? 'auto' : formatNumeric(row.desiredLength, 2);
+      const deltaText = row.deltaLength === null ? '--' : formatSignedNumeric(row.deltaLength, 2);
+      const peopleText = Number.isFinite(row.peopleIn)
+        ? (Math.abs(row.peopleIn - Math.round(row.peopleIn)) < 0.01
+          ? String(Math.round(row.peopleIn))
+          : formatNumeric(row.peopleIn, 2))
+        : '--';
+      const timeText = row.time >= 9999 ? 'Inf' : formatNumeric(row.time, 3);
+
+      return `<tr class="${row.rowClass}">
+        <td>${row.step}</td>
+        <td>#${row.connId}</td>
+        <td>${escHtml(row.fromName)}</td>
+        <td>${escHtml(row.toName)}</td>
+        <td>${escHtml(row.typeName)}</td>
+        <td>${row.directionLabel}</td>
+        <td>${formatNumeric(row.length, 2)}</td>
+        <td>${desiredText}</td>
+        <td>${deltaText}</td>
+        <td>${formatNumeric(row.width, 2)}</td>
+        <td>${peopleText}</td>
+        <td>${formatNumeric(row.density, 2)}</td>
+        <td>${formatNumeric(row.q, 2)}</td>
+        <td>${formatNumeric(row.Q, 2)}</td>
+        <td>${formatNumeric(row.speed, 2)}</td>
+        <td>${timeText}</td>
+        <td><span class="report-badge badge-${row.severity}">${escHtml(row.severityLabel)}</span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function generateMathProof(report = lastReportContext) {
+    if (!mathProofContent) return;
+    if (!report) {
+      mathProofContent.textContent = 'No report data available.';
+      return;
+    }
+
+    const lines = [];
+    lines.push('SALAMANDER EVACUATION REPORT - DETAILED MATHEMATICAL LOG');
+    lines.push(`Generated At: ${report.generatedAtDisplay}`);
+    lines.push(`Calculation Method: ${report.methodLabel}`);
+    lines.push(`Graph Size: ${report.graphSizeLabel}`);
+    lines.push(`Total People: ${Math.round(report.totalPeople)}`);
+    lines.push(`Total Evacuation Time: ${formatNumeric(report.totalTime, 3, '0.000')} min`);
+    lines.push(`Connections Reviewed: ${report.rows.length}`);
+    lines.push(`Bottlenecks: ${report.bottleneckCount} (blocked: ${report.blockedCount}, queued: ${report.queueCount})`);
+    lines.push('');
+    lines.push('REGULATORY BASELINE');
+    lines.push('- Regulation Source: Ordinance Iz-1971, Annex 8a');
+    lines.push('- Flow and speed lookup: Table 11');
+    lines.push('- Segment geometry precision: length 0.05 m, width 0.05 m');
+    lines.push('- Total evacuation time precision: 0.001 min');
+    lines.push('');
+    lines.push('SEGMENT-BY-SEGMENT CALCULATION');
+    lines.push('----------------------------------------');
+
+    if (report.rows.length === 0) {
+      lines.push('No segment rows were available. Add connected nodes and rerun the report.');
+    }
+
+    report.rows.forEach((row) => {
+      lines.push(`Segment ${row.step} | Connection #${row.connId} | ${row.fromName} -> ${row.toName}`);
+      lines.push(`  Type: ${row.typeName} | Direction: ${row.directionLabel}`);
+      lines.push(`  Geometry: L=${formatNumeric(row.length, 2)} m, W=${formatNumeric(row.width, 2)} m`);
+      if (row.desiredLength !== null) {
+        lines.push(`  Target Length: Lt=${formatNumeric(row.desiredLength, 2)} m | Deviation dL=${formatSignedNumeric(row.deltaLength, 2)} m`);
+      } else {
+        lines.push('  Target Length: auto (uses geometric length)');
+      }
+      lines.push(`  Input People Basis: ${formatNumeric(row.peopleIn, 2)} persons`);
+
+      if (state.calculationMethod === 'B') {
+        lines.push(`  Flow Inputs: q=${formatNumeric(row.q, 2)} p/m/min, Q=${formatNumeric(row.Q, 2)} p/min`);
+        lines.push(`  Limit Check: q_max=${formatNumeric(row.qMax, 2)} p/m/min, q_gran=${formatNumeric(row.qGran, 2)} p/m/min`);
+        if (row.hasQueue || row.severity === 'blocked') {
+          const ds = row.dynamicStats || {};
+          lines.push('  Queue Branch: capacity-limited movement detected.');
+          lines.push(`  Queue Dynamics: N_total=${formatNumeric(ds.N_total, 2, '0.00')}, N_eff=${formatNumeric(ds.N_eff, 2, '0.00')}, t_fill=${formatNumeric(ds.t_filling, 4, '0.0000')} min`);
+          lines.push('  Time Equation Used: t = L / v_gran + N_eff * (1 / Q_out - 1 / Q_in)');
+          lines.push(`  Boundary Speed: v_gran=${formatNumeric(row.vGran, 2)} m/min`);
+        } else {
+          lines.push('  Free-Flow Branch: no queue formation on this segment.');
+          lines.push('  Time Equation Used: t = L / v');
+        }
+      } else {
+        lines.push(`  Density-Based Branch: D=${formatNumeric(row.density, 2)} p/m2, v=${formatNumeric(row.speed, 2)} m/min`);
+        lines.push('  Time Equation Used: t = L / v');
+      }
+
+      lines.push(`  Segment Result: t=${formatNumeric(row.time, 4)} min, congestion=${row.severityLabel}`);
+      lines.push('');
+    });
+
+    lines.push('CRITICAL EXIT REVIEW');
+    lines.push('----------------------------------------');
+    const exits = state.nodes.filter(n => n.typeId === 'exit');
+    if (exits.length === 0) {
+      lines.push('No exit nodes defined. Total time is based on maximum reachable node time.');
+    } else {
+      exits.forEach((exitNode) => {
+        lines.push(`Exit ${exitNode.name || `Node ${exitNode.id}`}: maxTime=${formatNumeric(exitNode.maxTime, 4)} min`);
+      });
+    }
+    lines.push(`FINAL EVACUATION RESULT = ${formatNumeric(report.totalTime, 3, '0.000')} min`);
+    lines.push('');
+    lines.push('INTERPRETATION');
+    if (report.bottleneckCount === 0) {
+      lines.push('- Network currently operates in non-congested regime for computed conditions.');
+    } else {
+      lines.push(`- ${report.bottleneckCount} segments are near or above safe operating capacity.`);
+      lines.push('- Review widths, route alternatives, and layout ordering to reduce queue propagation.');
+    }
+    if (report.maxTimeRow) {
+      lines.push(`- Longest time contribution: Connection #${report.maxTimeRow.connId} (${report.maxTimeRow.fromName} -> ${report.maxTimeRow.toName}) at ${formatNumeric(report.maxTimeRow.time, 3)} min.`);
+    }
+    if (report.maxDensityRow) {
+      lines.push(`- Peak density observed on Connection #${report.maxDensityRow.connId} at ${formatNumeric(report.maxDensityRow.density, 2)} p/m2.`);
+    }
+
+    mathProofContent.textContent = lines.join('\n');
+  }
+
+  function exportReportPdf() {
+    state.metadata = normalizeMetadata({
+      ...state.metadata,
+      exportedAt: toLocalDateTimeValue(),
+    });
+    if (metaExportedAtInput) metaExportedAtInput.value = state.metadata.exportedAt || '';
+
+    const report = buildReportContext(true);
+    lastReportContext = report;
+    generateReportSummary(report);
+    generateReportDiagram(report);
+    generateReportTable(report);
+    generateMathProof(report);
+    render();
+
+    if (!reportCanvas) {
+      alert('Report diagram is not available for export.');
+      return;
+    }
+
+    const diagramDataUrl = reportCanvas.toDataURL('image/png');
+    const proofHtml = escHtml(mathProofContent ? mathProofContent.textContent : '').replace(/\n/g, '<br>');
+
+    const tableRows = report.rows.map((row) => {
+      const desiredText = row.desiredLength === null ? 'auto' : formatNumeric(row.desiredLength, 2);
+      const deltaText = row.deltaLength === null ? '--' : formatSignedNumeric(row.deltaLength, 2);
+      const peopleText = Number.isFinite(row.peopleIn)
+        ? (Math.abs(row.peopleIn - Math.round(row.peopleIn)) < 0.01
+          ? String(Math.round(row.peopleIn))
+          : formatNumeric(row.peopleIn, 2))
+        : '--';
+      const timeText = row.time >= 9999 ? 'Inf' : formatNumeric(row.time, 3);
+      return `<tr>
+        <td>${row.step}</td>
+        <td>#${row.connId}</td>
+        <td>${escHtml(row.fromName)}</td>
+        <td>${escHtml(row.toName)}</td>
+        <td>${escHtml(row.typeName)}</td>
+        <td>${row.directionLabel}</td>
+        <td>${formatNumeric(row.length, 2)}</td>
+        <td>${desiredText}</td>
+        <td>${deltaText}</td>
+        <td>${formatNumeric(row.width, 2)}</td>
+        <td>${peopleText}</td>
+        <td>${formatNumeric(row.density, 2)}</td>
+        <td>${formatNumeric(row.q, 2)}</td>
+        <td>${formatNumeric(row.Q, 2)}</td>
+        <td>${formatNumeric(row.speed, 2)}</td>
+        <td>${timeText}</td>
+        <td>${escHtml(row.severityLabel)}</td>
+      </tr>`;
+    }).join('');
+
+    const meta = report.metadata || {};
+    const summaryItems = [
+      ['Total Evacuation Time', `${formatNumeric(report.totalTime, 3)} min`],
+      ['Total People', String(Math.round(report.totalPeople))],
+      ['Critical Exits', String(report.criticalExits.length)],
+      ['Connections', String(report.connectionCount)],
+      ['Bottlenecks', String(report.bottleneckCount)],
+      ['Blocked', String(report.blockedCount)],
+      ['Queued', String(report.queueCount)],
+      ['Graph Size', report.graphSizeLabel],
+      ['Method', report.methodLabel],
+      ['Generated', report.generatedAtDisplay],
+    ];
+
+    const metaItems = [
+      ['Project', meta.project || 'Untitled'],
+      ['Author', meta.author || '-'],
+      ['Company', meta.company || '-'],
+      ['Scenario Date/Time', formatDateTimeForDisplay(meta.dateTime)],
+      ['Created', formatDateTimeForDisplay(meta.createdAt)],
+      ['Exported', formatDateTimeForDisplay(meta.exportedAt)],
+      ['Salamander Version', meta.salamanderVersion || SALAMANDER_VERSION],
+      ['Notes', meta.notes || '-'],
+    ];
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Popup blocked. Please allow popups to export report PDF.');
+      return;
+    }
+
+    printWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Salamander Report PDF</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; color: #111827; background: #ffffff; }
+    .page { padding: 22px 26px; }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    h2 { margin: 18px 0 10px; font-size: 16px; border-bottom: 1px solid #d1d5db; padding-bottom: 5px; }
+    p { margin: 6px 0; line-height: 1.45; }
+    .muted { color: #4b5563; font-size: 12px; }
+    .cards { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 8px; margin: 12px 0 14px; }
+    .card { border: 1px solid #d1d5db; border-radius: 6px; padding: 8px; }
+    .card .label { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: .3px; }
+    .card .value { font-size: 14px; font-weight: 600; margin-top: 4px; word-break: break-word; }
+    .meta-grid { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 8px; margin-top: 8px; }
+    .meta-item { border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; }
+    .meta-item .label { font-size: 11px; color: #6b7280; text-transform: uppercase; }
+    .meta-item .value { font-size: 13px; margin-top: 3px; white-space: pre-wrap; word-break: break-word; }
+    .diagram { margin-top: 10px; border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden; padding: 6px; background: #f9fafb; }
+    .diagram img { width: 100%; height: auto; display: block; }
+    table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 8px; }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; }
+    th, td { border: 1px solid #d1d5db; padding: 4px 5px; text-align: left; vertical-align: top; }
+    th { background: #f3f4f6; font-weight: 600; }
+    .proof { border: 1px solid #d1d5db; border-radius: 6px; padding: 10px; font-size: 10.5px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+    @media print {
+      .page { padding: 12mm; }
+      .page-break { page-break-before: always; }
+      @page { size: A4 landscape; margin: 10mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>Salamander Evacuation Report</h1>
+    <div class="muted">Generated: ${escHtml(report.generatedAtDisplay)}</div>
+    <div class="muted">Method: ${escHtml(report.methodLabel)}</div>
+
+    <h2>Executive Summary</h2>
+    <div class="cards">
+      ${summaryItems.map(([label, value]) => `<div class="card"><div class="label">${escHtml(label)}</div><div class="value">${escHtml(value)}</div></div>`).join('')}
+    </div>
+    <p><strong>Interpretation:</strong> This report captures the current network geometry, applied movement method, queue/capacity behavior, and segment-by-segment timing contribution to the final evacuation duration.</p>
+    <p><strong>Risk Notes:</strong> ${report.bottleneckCount > 0 ? `${report.bottleneckCount} bottleneck segments were detected and should be reviewed for added width, reduced load, or alternate routing.` : 'No bottleneck segments were detected in the current state.'}</p>
+
+    <h2>Project Metadata</h2>
+    <div class="meta-grid">
+      ${metaItems.map(([label, value]) => `<div class="meta-item"><div class="label">${escHtml(label)}</div><div class="value">${escHtml(value)}</div></div>`).join('')}
+    </div>
+
+    <h2>Graph Diagram</h2>
+    <div class="diagram">
+      <img src="${diagramDataUrl}" alt="Report Diagram" />
+    </div>
+  </div>
+
+  <div class="page page-break">
+    <h2>Detailed Connection Table</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Step</th>
+          <th>Conn</th>
+          <th>From</th>
+          <th>To</th>
+          <th>Type</th>
+          <th>Dir</th>
+          <th>Length (m)</th>
+          <th>Desired (m)</th>
+          <th>Delta (m)</th>
+          <th>Width (m)</th>
+          <th>People In</th>
+          <th>Density</th>
+          <th>q</th>
+          <th>Q</th>
+          <th>Speed</th>
+          <th>Time (min)</th>
+          <th>Congestion</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRows || '<tr><td colspan="17">No connection data available.</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="page page-break">
+    <h2>Verbose Mathematical Report</h2>
+    <div class="proof">${proofHtml}</div>
+  </div>
+</body>
+</html>`);
+
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 350);
+  }
+
   function selectItem(item, multi = false) {
     if (!item) return;
     const key = `${item.type}:${item.id}`;

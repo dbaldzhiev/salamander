@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Node Graph Editor</title>
   <meta name="description"
-    content="Interactive node graph editor — create, connect, and configure nodes with typed connections and properties.">
+    content="Interactive node graph editor â€” create, connect, and configure nodes with typed connections and properties.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
@@ -151,7 +151,7 @@
 
       <div id="canvas-container">
         <canvas id="graphCanvas"></canvas>
-        <div id="canvas-hint">Click canvas to add nodes · Drag to move · Scroll to zoom</div>
+        <div id="canvas-hint">Click canvas to add nodes Â· Drag to move Â· Scroll to zoom</div>
       </div>
 
       <div id="bottom-panel">
@@ -196,9 +196,9 @@
                 <th>Target</th>
                 <th>Type</th>
                 <th>Width (m)</th>
-                <th>Area (m²)</th>
+                <th>Area (mÂ²)</th>
                 <th>Dist (m)</th>
-                <th>Density (p/m²)</th>
+                <th>Density (p/mÂ²)</th>
                 <th>Sp. Flow (q)</th>
                 <th>Cap. (Q)</th>
                 <th>Speed (m/min)</th>
@@ -213,7 +213,7 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th>Density (p/m²)</th>
+                <th>Density (p/mÂ²)</th>
                 <th>Horizontal v (m/min)</th>
                 <th>Horizontal q (p/m/min)</th>
                 <th>Stair Down v</th>
@@ -271,12 +271,16 @@
     <div class="modal-container">
       <div class="modal-header">
         <h2>Evacuation Calculation Report</h2>
-        <button id="btnCloseReport" class="icon-btn" title="Close">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
+        <div class="modal-header-actions">
+          <button id="btnRefreshReport" class="action-btn" title="Recalculate and refresh report">Refresh</button>
+          <button id="btnExportReportPdf" class="action-btn" title="Export report to PDF">Export PDF</button>
+          <button id="btnCloseReport" class="icon-btn" title="Close">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="modal-content">
         <!-- Part 0: Summary -->
@@ -293,10 +297,32 @@
               <span class="stat-value" id="repTotalPeople">--</span>
             </div>
             <div class="stat-card">
-              <span class="stat-label">Critical Path Nodes</span>
+              <span class="stat-label">Critical Exits</span>
               <span class="stat-value" id="repCriticalPath">--</span>
             </div>
+            <div class="stat-card">
+              <span class="stat-label">Connections</span>
+              <span class="stat-value" id="repConnCount">--</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Bottlenecks</span>
+              <span class="stat-value" id="repBottlenecks">--</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Graph Size</span>
+              <span class="stat-value stat-value-small" id="repGraphSize">--</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Method</span>
+              <span class="stat-value stat-value-small" id="repMethod">--</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Generated</span>
+              <span class="stat-value stat-value-small" id="repGeneratedAt">--</span>
+            </div>
           </div>
+          <div id="reportExecutiveSummary" class="report-executive"></div>
+          <div id="reportMetaGrid" class="report-meta-grid"></div>
         </section>
 
         <!-- Part 1: Static Diagram -->
@@ -310,22 +336,32 @@
         <!-- Part 2: Sequence Table -->
         <section id="report-table" class="report-section">
           <h3>2. Sequence of Travel</h3>
-          <table class="report-data-table">
+          <div class="report-table-wrap">
+            <table class="report-data-table">
             <thead>
               <tr>
                 <th>Step</th>
-                <th>From Node</th>
-                <th>To Node</th>
+                <th>Conn</th>
+                <th>From</th>
+                <th>To</th>
                 <th>Type</th>
-                <th>Distance (m)</th>
+                <th>Dir</th>
+                <th>Length (m)</th>
+                <th>Desired (m)</th>
+                <th>Delta (m)</th>
                 <th>Width (m)</th>
-                <th>Density (p/m²)</th>
-                <th>Speed (m/min)</th>
+                <th>People In</th>
+                <th>Density</th>
+                <th>q</th>
+                <th>Q</th>
+                <th>Speed</th>
                 <th>Time (min)</th>
+                <th>Congestion</th>
               </tr>
             </thead>
-            <tbody id="reportTableBody"></tbody>
-          </table>
+              <tbody id="reportTableBody"></tbody>
+            </table>
+          </div>
         </section>
 
         <!-- Part 3: Math Proof -->
