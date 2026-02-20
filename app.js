@@ -96,6 +96,7 @@
   const btnMetadata = document.getElementById('btnMetadata');
   const btnSettings = document.getElementById('btnSettings');
   const btnOrderGraph = document.getElementById('btnOrderGraph');
+  const btnRenumber = document.getElementById('btnRenumber');
   if (btnOrderGraph) btnOrderGraph.setAttribute('aria-pressed', 'false');
 
   // Properties Panel Elements
@@ -1630,11 +1631,6 @@
     // Create two new connections replacing the old one
     const dSrcMid = dist(src, newNode);
     const dMidTgt = dist(newNode, tgt);
-    const dFull = Math.max(1e-6, dist(src, tgt));
-    const parentDesired = Number.isFinite(Number(conn.desiredDistance)) && Number(conn.desiredDistance) > 0
-      ? Number(conn.desiredDistance)
-      : null;
-
     const conn1 = {
       id: state.nextConnId++,
       sourceId: conn.sourceId,
@@ -1646,6 +1642,7 @@
       weight: conn.weight,
       congestion: conn.congestion,
       width: roundWidthMeters(conn.width || 1.2),
+      desiredDistance: roundDistanceMeters(dSrcMid / PIXELS_PER_METER),
       props: { ...conn.props },
     };
     const conn2 = {
@@ -1659,12 +1656,9 @@
       weight: conn.weight,
       congestion: conn.congestion,
       width: roundWidthMeters(conn.width || 1.2),
+      desiredDistance: roundDistanceMeters(dMidTgt / PIXELS_PER_METER),
       props: { ...conn.props },
     };
-    if (parentDesired !== null) {
-      conn1.desiredDistance = roundDistanceMeters(parentDesired * (dSrcMid / dFull));
-      conn2.desiredDistance = roundDistanceMeters(parentDesired * (dMidTgt / dFull));
-    }
 
     // Remove old connection, add new ones
     state.connections = state.connections.filter(c => c.id !== conn.id);
@@ -1733,6 +1727,7 @@
       typeId: state.connTypes[0].id,
       direction: 'forward',
       distance: roundDistanceMeters(d / PIXELS_PER_METER),
+      desiredDistance: roundDistanceMeters(d / PIXELS_PER_METER),
       speed: 0,
       weight: 1,
       congestion: 'none',
@@ -1799,11 +1794,7 @@
       width: roundWidthMeters(((c1.width || 1.2) + (c2.width || 1.2)) / 2),
       props: { ...c1.props, ...c2.props },
     };
-    const c1Desired = Number.isFinite(Number(c1.desiredDistance)) && Number(c1.desiredDistance) > 0 ? Number(c1.desiredDistance) : null;
-    const c2Desired = Number.isFinite(Number(c2.desiredDistance)) && Number(c2.desiredDistance) > 0 ? Number(c2.desiredDistance) : null;
-    if (c1Desired !== null || c2Desired !== null) {
-      mergedConn.desiredDistance = roundDistanceMeters((c1Desired !== null ? c1Desired : (c1.distance || 0)) + (c2Desired !== null ? c2Desired : (c2.distance || 0)));
-    }
+    mergedConn.desiredDistance = mergedConn.distance;
     return mergedConn;
   }
 
@@ -1842,16 +1833,13 @@
       if (src && tgt) {
         // Distance in meters
         c.distance = roundDistanceMeters(dist(src, tgt) / PIXELS_PER_METER);
+        c.desiredDistance = c.distance;
       }
     });
     recalcFireSafety();
   }
 
   function getConnectionDesiredDistance(conn) {
-    const desired = Number(conn.desiredDistance);
-    if (Number.isFinite(desired) && desired > 0) {
-      return roundDistanceMeters(desired);
-    }
     const fallback = Number(conn.distance);
     if (Number.isFinite(fallback) && fallback > 0) {
       return roundDistanceMeters(fallback);
@@ -1907,6 +1895,7 @@
     moving.x = snapToGrid(anchor.x + ux * targetPx);
     moving.y = snapToGrid(anchor.y + uy * targetPx);
     conn.distance = targetMeters;
+    conn.desiredDistance = targetMeters;
     return true;
   }
 
@@ -2088,6 +2077,155 @@
       }
     }
     return total;
+  }
+
+  function getNodeTypeSortPriority(typeId) {
+    if (typeId === 'start') return 0;
+    if (typeId === 'start2') return 1;
+    if (typeId === 'waypoint') return 2;
+    if (typeId === 'door') return 3;
+    if (typeId === 'normal') return 4;
+    if (typeId === 'exit') return 5;
+    return 6;
+  }
+
+  function getEvacuationReachableNodeIds() {
+    const starts = state.nodes.filter(n => SOURCE_TYPES.includes(n.typeId)).map(n => n.id);
+    const visited = new Set(starts);
+    const queue = [...starts];
+
+    while (queue.length > 0) {
+      const curr = queue.shift();
+      for (const conn of state.connections) {
+        if (conn.sourceId === curr) {
+          const nextId = conn.targetId;
+          if (canTraverseConnection(conn, curr, nextId) && !visited.has(nextId)) {
+            visited.add(nextId);
+            queue.push(nextId);
+          }
+        }
+        if (conn.targetId === curr) {
+          const nextId = conn.sourceId;
+          if (canTraverseConnection(conn, curr, nextId) && !visited.has(nextId)) {
+            visited.add(nextId);
+            queue.push(nextId);
+          }
+        }
+      }
+    }
+
+    return visited;
+  }
+
+  function getEvacuationOrderedNodes() {
+    const reachable = getEvacuationReachableNodeIds();
+
+    return [...state.nodes].sort((a, b) => {
+      const aIsStart = SOURCE_TYPES.includes(a.typeId);
+      const bIsStart = SOURCE_TYPES.includes(b.typeId);
+      if (aIsStart !== bIsStart) return aIsStart ? -1 : 1;
+
+      const aReach = reachable.has(a.id);
+      const bReach = reachable.has(b.id);
+      if (aReach !== bReach) return aReach ? -1 : 1;
+
+      const aTime = Number.isFinite(Number(a.maxTime)) ? Number(a.maxTime) : 0;
+      const bTime = Number.isFinite(Number(b.maxTime)) ? Number(b.maxTime) : 0;
+      if (Math.abs(aTime - bTime) > 1e-6) return aTime - bTime;
+
+      const typeDelta = getNodeTypeSortPriority(a.typeId) - getNodeTypeSortPriority(b.typeId);
+      if (typeDelta !== 0) return typeDelta;
+
+      if (Math.abs(a.y - b.y) > 1e-6) return a.y - b.y;
+      if (Math.abs(a.x - b.x) > 1e-6) return a.x - b.x;
+      return a.id - b.id;
+    });
+  }
+
+  function getConnectionEvacuationSortKey(conn, nodeRank) {
+    const srcRank = nodeRank.get(conn.sourceId) ?? Number.MAX_SAFE_INTEGER;
+    const tgtRank = nodeRank.get(conn.targetId) ?? Number.MAX_SAFE_INTEGER;
+    const dir = conn.direction || 'forward';
+
+    if (dir === 'backward') return [tgtRank, srcRank];
+    if (dir === 'both') return [Math.min(srcRank, tgtRank), Math.max(srcRank, tgtRank)];
+    return [srcRank, tgtRank];
+  }
+
+  function renumberGraphByEvacuationLogic() {
+    if (state.nodes.length === 0 && state.connections.length === 0) return;
+
+    recalcPeopleCounts();
+
+    const orderedNodes = getEvacuationOrderedNodes();
+    const nodeRank = new Map(orderedNodes.map((n, idx) => [n.id, idx]));
+    const orderedConnections = [...state.connections].sort((a, b) => {
+      const [aFrom, aTo] = getConnectionEvacuationSortKey(a, nodeRank);
+      const [bFrom, bTo] = getConnectionEvacuationSortKey(b, nodeRank);
+
+      if (aFrom !== bFrom) return aFrom - bFrom;
+      if (aTo !== bTo) return aTo - bTo;
+      const typeCmp = String(a.typeId || '').localeCompare(String(b.typeId || ''));
+      if (typeCmp !== 0) return typeCmp;
+      return a.id - b.id;
+    });
+
+    const nodeIdMap = new Map();
+    orderedNodes.forEach((node, idx) => {
+      nodeIdMap.set(node.id, idx + 1);
+    });
+
+    const connIdMap = new Map();
+    orderedConnections.forEach((conn, idx) => {
+      connIdMap.set(conn.id, idx + 1);
+    });
+
+    state.nodes.forEach((node) => {
+      const nextId = nodeIdMap.get(node.id);
+      if (nextId != null) node.id = nextId;
+    });
+
+    state.connections.forEach((conn) => {
+      const nextConnId = connIdMap.get(conn.id);
+      const nextSrcId = nodeIdMap.get(conn.sourceId);
+      const nextTgtId = nodeIdMap.get(conn.targetId);
+
+      if (nextConnId != null) conn.id = nextConnId;
+      if (nextSrcId != null) conn.sourceId = nextSrcId;
+      if (nextTgtId != null) conn.targetId = nextTgtId;
+    });
+
+    state.nodes.sort((a, b) => a.id - b.id);
+    state.connections.sort((a, b) => a.id - b.id);
+
+    const remappedSelection = new Set();
+    selectedItems.forEach((key) => {
+      const [kind, idStr] = key.split(':');
+      const id = parseInt(idStr, 10);
+      if (!Number.isFinite(id)) return;
+
+      if (kind === 'node') {
+        const nextNodeId = nodeIdMap.get(id);
+        if (nextNodeId != null) remappedSelection.add(`node:${nextNodeId}`);
+      } else if (kind === 'connection') {
+        const nextConnId = connIdMap.get(id);
+        if (nextConnId != null) remappedSelection.add(`connection:${nextConnId}`);
+      }
+    });
+    selectedItems = remappedSelection;
+
+    if (connectSource != null) {
+      connectSource = nodeIdMap.get(connectSource) || null;
+    }
+
+    state.nextNodeId = state.nodes.length + 1;
+    state.nextConnId = state.connections.length + 1;
+
+    sanitizeSelection();
+    recalcPeopleCounts();
+    updatePropertiesPanel();
+    commitHistory();
+    render();
   }
 
   // ─── Selection ────────────────────────────────────────────
@@ -2693,12 +2831,17 @@
       return;
     }
 
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
     switch (key) {
       case 'v': setTool('select'); break;
       case 'n': setTool('addNode'); break;
       case 'o': setTool('addDoor'); break;
       case 'c': setTool('connect'); break;
       case 'd': setTool('delete'); break;
+      case 'r':
+        renumberGraphByEvacuationLogic();
+        break;
       case 'delete':
       case 'backspace':
         deleteSelection();
@@ -2751,6 +2894,12 @@
   if (btnOrderGraph) {
     btnOrderGraph.addEventListener('click', () => {
       setOrderGraphEnabled(!orderGraphEnabled);
+    });
+  }
+
+  if (btnRenumber) {
+    btnRenumber.addEventListener('click', () => {
+      renumberGraphByEvacuationLogic();
     });
   }
 
@@ -2845,12 +2994,7 @@
             state.connections = data.connections.map((c) => {
               const next = { ...c };
               delete next.distanceManual;
-              const desired = Number(next.desiredDistance);
-              if (Number.isFinite(desired) && desired > 0) {
-                next.desiredDistance = roundDistanceMeters(desired);
-              } else {
-                delete next.desiredDistance;
-              }
+              delete next.desiredDistance;
               return next;
             });
           }
@@ -2977,13 +3121,6 @@
     return v.toFixed(digits);
   }
 
-  function formatSignedNumeric(value, digits = 2, fallback = '-') {
-    const v = Number(value);
-    if (!Number.isFinite(v)) return fallback;
-    const prefix = v > 0 ? '+' : '';
-    return `${prefix}${v.toFixed(digits)}`;
-  }
-
   function connectionDirectionLabel(direction) {
     const dir = direction || 'forward';
     if (dir === 'backward') return '<-';
@@ -3084,10 +3221,10 @@
       const length = Number.isFinite(connDist) && connDist >= 0
         ? roundDistanceMeters(connDist)
         : roundDistanceMeters(dist(src, tgt) / PIXELS_PER_METER);
+      conn.desiredDistance = length;
 
-      const desiredRaw = Number(conn.desiredDistance);
-      const desiredLength = Number.isFinite(desiredRaw) && desiredRaw > 0 ? roundDistanceMeters(desiredRaw) : null;
-      const deltaLength = desiredLength === null ? null : roundDistanceMeters(length - desiredLength);
+      const desiredLength = length;
+      const deltaLength = 0;
 
       const width = Math.max(0.05, roundWidthMeters(Number(conn.width) || 1.2));
       const stats = conn.calcStats || {};
@@ -3267,8 +3404,10 @@
     }
   }
 
-  function generateReportDiagram(report = lastReportContext) {
+  function generateReportDiagram(report = lastReportContext, options = {}) {
     if (!reportCanvas || !repCtx || !report) return;
+    const theme = options && options.theme === 'light' ? 'light' : 'dark';
+    const isLight = theme === 'light';
 
     const containerEl = reportCanvas.parentElement;
     const cssW = Math.max(900, Math.round((containerEl ? containerEl.clientWidth : 900) - 2));
@@ -3284,14 +3423,19 @@
     repCtx.clearRect(0, 0, cssW, cssH);
 
     const bg = repCtx.createLinearGradient(0, 0, 0, cssH);
-    bg.addColorStop(0, '#0d1117');
-    bg.addColorStop(1, '#111827');
+    if (isLight) {
+      bg.addColorStop(0, '#f8fafc');
+      bg.addColorStop(1, '#eef2f7');
+    } else {
+      bg.addColorStop(0, '#0d1117');
+      bg.addColorStop(1, '#111827');
+    }
     repCtx.fillStyle = bg;
     repCtx.fillRect(0, 0, cssW, cssH);
 
     if (state.nodes.length === 0) {
-      repCtx.fillStyle = '#9ca3af';
-      repCtx.font = '600 16px Inter, sans-serif';
+      repCtx.fillStyle = isLight ? '#6b7280' : '#9ca3af';
+      repCtx.font = '600 14px Inter, sans-serif';
       repCtx.textAlign = 'center';
       repCtx.textBaseline = 'middle';
       repCtx.fillText('No graph data to render', cssW / 2, cssH / 2);
@@ -3319,7 +3463,7 @@
     const meterStepPx = meterStepWorld * scale;
     if (meterStepPx >= 10) {
       repCtx.beginPath();
-      repCtx.strokeStyle = 'rgba(107,114,128,0.22)';
+      repCtx.strokeStyle = isLight ? 'rgba(100,116,139,0.28)' : 'rgba(107,114,128,0.22)';
       repCtx.lineWidth = 1;
       const gx0 = Math.floor(bounds.minX / meterStepWorld) * meterStepWorld;
       const gy0 = Math.floor(bounds.minY / meterStepWorld) * meterStepWorld;
@@ -3420,25 +3564,25 @@
         drawArrow(s.x + Math.cos(angle) * arrowInset, s.y + Math.sin(angle) * arrowInset, angle + Math.PI);
       }
 
-      const label = `#${row.connId} ${formatNumeric(row.length, 2)}m | ${formatNumeric(row.time, 3)}min`;
+      const label = `${formatNumeric(row.length, 2)}m ${formatNumeric(row.time, 3)}min`;
       const lx = (s.x + t.x) * 0.5;
       const ly = (s.y + t.y) * 0.5;
       repCtx.save();
-      repCtx.font = '11px Inter, sans-serif';
+      repCtx.font = '9px Inter, sans-serif';
       repCtx.textAlign = 'center';
       repCtx.textBaseline = 'middle';
       const tw = repCtx.measureText(label).width;
-      repCtx.fillStyle = 'rgba(13,17,23,0.86)';
+      repCtx.fillStyle = isLight ? 'rgba(248,250,252,0.9)' : 'rgba(13,17,23,0.86)';
       repCtx.beginPath();
-      repCtx.roundRect(lx - tw / 2 - 5, ly - 9, tw + 10, 18, 4);
+      repCtx.roundRect(lx - tw / 2 - 4, ly - 7, tw + 8, 14, 3);
       repCtx.fill();
-      repCtx.fillStyle = '#e5e7eb';
+      repCtx.fillStyle = isLight ? '#1f2937' : '#e5e7eb';
       repCtx.fillText(label, lx, ly);
       repCtx.restore();
     });
 
     const nodeTypeMap = new Map(state.nodeTypes.map(t => [t.id, t]));
-    const nodeRadius = Math.max(5.5, Math.min(14, NODE_RADIUS * Math.sqrt(scale) * 0.9));
+    const nodeRadius = Math.max(4, Math.min(10, NODE_RADIUS * Math.sqrt(scale) * 0.62));
 
     state.nodes.forEach((node) => {
       const p = toPoint(node);
@@ -3449,79 +3593,37 @@
       if (isDoor) {
         const widthFactor = getDoorWidthFactor(node);
         const halfLong = nodeRadius * 1.12 * widthFactor;
-        const halfShort = Math.max(3, nodeRadius * 0.38);
+        const halfShort = Math.max(2.2, nodeRadius * 0.34);
         const angle = getDoorAxisAngle(node);
 
         repCtx.translate(p.x, p.y);
         repCtx.rotate(angle);
         repCtx.beginPath();
         repCtx.roundRect(-halfLong, -halfShort, halfLong * 2, halfShort * 2, 2.5);
-        repCtx.fillStyle = '#111827';
+        repCtx.fillStyle = nt.color || '#d29922';
         repCtx.fill();
-        repCtx.strokeStyle = nt.color || '#d29922';
-        repCtx.lineWidth = 1.8;
+        repCtx.strokeStyle = isLight ? 'rgba(30,41,59,0.7)' : 'rgba(13,17,23,0.8)';
+        repCtx.lineWidth = 1;
         repCtx.stroke();
       } else {
         repCtx.beginPath();
         repCtx.arc(p.x, p.y, nodeRadius, 0, Math.PI * 2);
-        repCtx.fillStyle = '#111827';
+        repCtx.fillStyle = nt.color || '#8b949e';
         repCtx.fill();
-        repCtx.strokeStyle = nt.color || '#8b949e';
-        repCtx.lineWidth = 1.8;
+        repCtx.strokeStyle = isLight ? 'rgba(30,41,59,0.7)' : 'rgba(13,17,23,0.8)';
+        repCtx.lineWidth = 1;
         repCtx.stroke();
       }
       repCtx.restore();
 
       repCtx.save();
-      repCtx.font = `${Math.max(10, Math.min(12.5, nodeRadius * 0.95))}px Inter, sans-serif`;
-      repCtx.fillStyle = '#e5e7eb';
+      repCtx.font = `${Math.max(8, Math.min(10.5, nodeRadius * 0.9))}px Inter, sans-serif`;
+      repCtx.fillStyle = isLight ? '#1f2937' : '#d1d5db';
       repCtx.textAlign = 'center';
       repCtx.textBaseline = 'top';
-      repCtx.fillText(node.name || `Node ${node.id}`, p.x, p.y + nodeRadius + 4);
+      repCtx.fillText(node.name || `Node ${node.id}`, p.x, p.y + nodeRadius + 3);
       repCtx.restore();
     });
-
-    const legendX = 16;
-    const legendY = 14;
-    const legendW = 332;
-    const legendH = 122;
-    repCtx.save();
-    repCtx.fillStyle = 'rgba(13,17,23,0.9)';
-    repCtx.strokeStyle = 'rgba(75,85,99,0.75)';
-    repCtx.lineWidth = 1;
-    repCtx.beginPath();
-    repCtx.roundRect(legendX, legendY, legendW, legendH, 8);
-    repCtx.fill();
-    repCtx.stroke();
-
-    repCtx.fillStyle = '#e5e7eb';
-    repCtx.font = '600 12px Inter, sans-serif';
-    repCtx.textAlign = 'left';
-    repCtx.textBaseline = 'top';
-    repCtx.fillText(`Method: ${report.methodLabel}`, legendX + 10, legendY + 9);
-    repCtx.fillText(`Total Time: ${formatNumeric(report.totalTime, 3)} min`, legendX + 10, legendY + 26);
-    repCtx.fillText(`People: ${Math.round(report.totalPeople)}  |  Size: ${report.graphSizeLabel}`, legendX + 10, legendY + 43);
-
-    const legItems = [
-      ['None', '#58a6ff'],
-      ['Medium', '#e3b341'],
-      ['High', '#d29922'],
-      ['Very High', '#f0883e'],
-      ['Blocked', '#f85149'],
-    ];
-    legItems.forEach((item, idx) => {
-      const y = legendY + 66 + idx * 10;
-      repCtx.strokeStyle = item[1];
-      repCtx.lineWidth = 3;
-      repCtx.beginPath();
-      repCtx.moveTo(legendX + 12, y + 4);
-      repCtx.lineTo(legendX + 34, y + 4);
-      repCtx.stroke();
-      repCtx.fillStyle = '#d1d5db';
-      repCtx.font = '10px Inter, sans-serif';
-      repCtx.fillText(item[0], legendX + 40, y);
-    });
-    repCtx.restore();
 
     const scaleCandidates = [1, 2, 5, 10, 20];
     let scaleMeters = 1;
@@ -3535,7 +3637,7 @@
     const barX = cssW - 190;
     const barY = cssH - 26;
     repCtx.save();
-    repCtx.strokeStyle = '#e5e7eb';
+    repCtx.strokeStyle = isLight ? '#334155' : '#e5e7eb';
     repCtx.lineWidth = 2;
     repCtx.beginPath();
     repCtx.moveTo(barX, barY);
@@ -3545,8 +3647,8 @@
     repCtx.moveTo(barX + scalePx, barY - 4);
     repCtx.lineTo(barX + scalePx, barY + 4);
     repCtx.stroke();
-    repCtx.font = '11px Inter, sans-serif';
-    repCtx.fillStyle = '#e5e7eb';
+    repCtx.font = '10px Inter, sans-serif';
+    repCtx.fillStyle = isLight ? '#334155' : '#e5e7eb';
     repCtx.textAlign = 'center';
     repCtx.textBaseline = 'bottom';
     repCtx.fillText(`${scaleMeters} m`, barX + scalePx / 2, barY - 6);
@@ -3561,8 +3663,8 @@
     }
 
     reportTableBody.innerHTML = report.rows.map((row) => {
-      const desiredText = row.desiredLength === null ? 'auto' : formatNumeric(row.desiredLength, 2);
-      const deltaText = row.deltaLength === null ? '--' : formatSignedNumeric(row.deltaLength, 2);
+      const desiredText = formatNumeric(row.length, 2);
+      const deltaText = '0.00';
       const peopleText = Number.isFinite(row.peopleIn)
         ? (Math.abs(row.peopleIn - Math.round(row.peopleIn)) < 0.01
           ? String(Math.round(row.peopleIn))
@@ -3626,11 +3728,7 @@
       lines.push(`Segment ${row.step} | Connection #${row.connId} | ${row.fromName} -> ${row.toName}`);
       lines.push(`  Type: ${row.typeName} | Direction: ${row.directionLabel}`);
       lines.push(`  Geometry: L=${formatNumeric(row.length, 2)} m, W=${formatNumeric(row.width, 2)} m`);
-      if (row.desiredLength !== null) {
-        lines.push(`  Target Length: Lt=${formatNumeric(row.desiredLength, 2)} m | Deviation dL=${formatSignedNumeric(row.deltaLength, 2)} m`);
-      } else {
-        lines.push('  Target Length: auto (uses geometric length)');
-      }
+      lines.push(`  Length Policy: desired length equals actual length (${formatNumeric(row.length, 2)} m).`);
       lines.push(`  Input People Basis: ${formatNumeric(row.peopleIn, 2)} persons`);
 
       if (state.calculationMethod === 'B') {
@@ -3694,10 +3792,9 @@
     const report = buildReportContext(true);
     lastReportContext = report;
     generateReportSummary(report);
-    generateReportDiagram(report);
     generateReportTable(report);
     generateMathProof(report);
-    render();
+    generateReportDiagram(report, { theme: 'light' });
 
     if (!reportCanvas) {
       alert('Report diagram is not available for export.');
@@ -3705,11 +3802,13 @@
     }
 
     const diagramDataUrl = reportCanvas.toDataURL('image/png');
+    generateReportDiagram(report, { theme: 'dark' });
+    render();
     const proofHtml = escHtml(mathProofContent ? mathProofContent.textContent : '').replace(/\n/g, '<br>');
 
     const tableRows = report.rows.map((row) => {
-      const desiredText = row.desiredLength === null ? 'auto' : formatNumeric(row.desiredLength, 2);
-      const deltaText = row.deltaLength === null ? '--' : formatSignedNumeric(row.deltaLength, 2);
+      const desiredText = formatNumeric(row.length, 2);
+      const deltaText = '0.00';
       const peopleText = Number.isFinite(row.peopleIn)
         ? (Math.abs(row.peopleIn - Math.round(row.peopleIn)) < 0.01
           ? String(Math.round(row.peopleIn))
@@ -4066,44 +4165,6 @@
         commitHistory();
         render();
       }, false, '0.05'));
-
-      const commonDesired = getCommonValue(selConns, (c) => {
-        const desired = Number(c.desiredDistance);
-        return Number.isFinite(desired) && desired > 0 ? roundDistanceMeters(desired) : null;
-      });
-      const desiredInput = createPropInput('Desired Length (m)', 'number',
-        commonDesired === null ? '' : commonDesired, (val) => {
-          const v = parseFloat(val);
-          if (!isNaN(v) && v > 0) {
-            const desired = Math.max(GRID_SIZE_METERS, roundDistanceMeters(v));
-            selConns.forEach(c => c.desiredDistance = desired);
-            commitHistory();
-            updatePropertiesPanel();
-            render();
-          }
-        }, false, '0.05');
-      if (commonDesired === null) {
-        const input = desiredInput.querySelector('input');
-        if (input) input.placeholder = 'auto';
-      }
-      section.appendChild(desiredInput);
-
-      const clearDesiredBtn = document.createElement('button');
-      clearDesiredBtn.textContent = 'Use Actual Length';
-      clearDesiredBtn.className = 'action-btn-small';
-      clearDesiredBtn.style.marginTop = '4px';
-      clearDesiredBtn.style.width = '100%';
-      clearDesiredBtn.style.padding = '6px 8px';
-      clearDesiredBtn.style.justifyContent = 'center';
-      clearDesiredBtn.onclick = () => {
-        selConns.forEach(c => {
-          delete c.desiredDistance;
-        });
-        commitHistory();
-        updatePropertiesPanel();
-        render();
-      };
-      section.appendChild(clearDesiredBtn);
 
       // Distance
       const commonDist = getCommonValue(selConns, c => c.distance);
