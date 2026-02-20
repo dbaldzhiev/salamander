@@ -162,6 +162,15 @@
 
       <div id="canvas-container">
         <canvas id="graphCanvas"></canvas>
+        <button id="btnZoomFit" class="canvas-overlay-btn" title="Zoom to fit graph (F)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 3 21 3 21 9" />
+            <polyline points="9 21 3 21 3 15" />
+            <line x1="21" y1="3" x2="14" y2="10" />
+            <line x1="3" y1="21" x2="10" y2="14" />
+          </svg>
+          Fit
+        </button>
         <div id="canvas-hint">Click canvas to add nodes Â· Drag to move Â· Scroll to zoom</div>
       </div>
 
@@ -349,27 +358,7 @@
           <h3>2. Sequence of Travel</h3>
           <div class="report-table-wrap">
             <table class="report-data-table">
-            <thead>
-              <tr>
-                <th>Step</th>
-                <th>Conn</th>
-                <th>From</th>
-                <th>To</th>
-                <th>Type</th>
-                <th>Dir</th>
-                <th>Length (m)</th>
-                <th>Desired (m)</th>
-                <th>Delta (m)</th>
-                <th>Width (m)</th>
-                <th>People In</th>
-                <th>Density</th>
-                <th>q</th>
-                <th>Q</th>
-                <th>Speed</th>
-                <th>Time (min)</th>
-                <th>Congestion</th>
-              </tr>
-            </thead>
+              <thead id="reportTableHead"></thead>
               <tbody id="reportTableBody"></tbody>
             </table>
           </div>

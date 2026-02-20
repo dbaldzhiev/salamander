@@ -93,6 +93,8 @@
   const canvas = document.getElementById('graphCanvas');
   const ctx = canvas.getContext('2d');
   const canvasHint = document.getElementById('canvas-hint');
+  const btnZoomFit = document.getElementById('btnZoomFit');
+  const zoomLevelDisplay = document.getElementById('zoomLevel');
   const btnMetadata = document.getElementById('btnMetadata');
   const btnSettings = document.getElementById('btnSettings');
   const btnOrderGraph = document.getElementById('btnOrderGraph');
@@ -397,6 +399,60 @@
     render();
   }
   window.addEventListener('resize', resizeCanvas);
+
+  function setZoomLevelDisplay() {
+    if (zoomLevelDisplay) {
+      zoomLevelDisplay.textContent = `${Math.round(cam.zoom * 100)}%`;
+    }
+  }
+
+  function zoomToFitGraph(options = {}) {
+    const { paddingPx = 56, skipRender = false } = options;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 2 || rect.height <= 2) return;
+
+    if (state.nodes.length === 0) {
+      cam.zoom = 1;
+      cam.x = rect.width / 2;
+      cam.y = rect.height / 2;
+      setZoomLevelDisplay();
+      if (!skipRender) render();
+      return;
+    }
+
+    const bounds = computeGraphBoundsWorld(state.nodes);
+    const padWorld = PIXELS_PER_METER * 0.9;
+    const minX = bounds.minX - padWorld;
+    const maxX = bounds.maxX + padWorld;
+    const minY = bounds.minY - padWorld;
+    const maxY = bounds.maxY + padWorld;
+
+    const spanW = Math.max(1, maxX - minX);
+    const spanH = Math.max(1, maxY - minY);
+    const usableW = Math.max(10, rect.width - paddingPx * 2);
+    const usableH = Math.max(10, rect.height - paddingPx * 2);
+    const fitZoom = clamp(Math.min(usableW / spanW, usableH / spanH), ZOOM_MIN, ZOOM_MAX);
+
+    const centerX = (minX + maxX) * 0.5;
+    const centerY = (minY + maxY) * 0.5;
+    cam.zoom = fitZoom;
+    cam.x = rect.width * 0.5 - centerX * cam.zoom;
+    cam.y = rect.height * 0.5 - centerY * cam.zoom;
+    setZoomLevelDisplay();
+    if (!skipRender) render();
+  }
+
+  function runOrderGraphIterations(maxIterations = 180) {
+    if (state.connections.length === 0 || state.nodes.length < 2) return false;
+    let changed = false;
+    for (let i = 0; i < maxIterations; i++) {
+      const stepChanged = orderGraphStep();
+      if (!stepChanged) break;
+      changed = true;
+    }
+    if (changed) updateConnectionDistances();
+    return changed;
+  }
 
   // ─── Fire Safety Calculations ─────────────────────────────
 
@@ -1427,34 +1483,53 @@
       drawArrow(bx, by, angle + Math.PI);
     }
 
-    // Label (Distance + Time)
-    const midX = (s.x + e.x) / 2;
-    const midY = (s.y + e.y) / 2;
+    // Label (Distance + Time) rotated along connection for readability
+    const dx = e.x - s.x;
+    const dy = e.y - s.y;
+    const len = Math.hypot(dx, dy);
+    const ux = len > 1e-6 ? dx / len : 1;
+    const uy = len > 1e-6 ? dy / len : 0;
+    const nx = -uy;
+    const ny = ux;
 
-    let label = `${conn.distance}m`;
-    if (conn.calcStats) {
-      // Show Time (min) or Density?
-      // Let's show time if it's significant
-      const t = conn.calcStats.time;
-      if (t !== undefined) label += ` • ${t.toFixed(2)}min`;
-    }
+    const rawTime = conn.calcStats ? Number(conn.calcStats.time) : NaN;
+    const timeLabel = Number.isFinite(rawTime) ? formatNumeric(rawTime, 3, '0.000') : '--';
+    const fullLabel = `L=${formatNumeric(conn.distance, 2)}m, t=${timeLabel}min`;
+    const shortLabel = `L=${formatNumeric(conn.distance, 2)}, t=${timeLabel}`;
+    const compactLabel = `L=${formatNumeric(conn.distance, 2)},t=${timeLabel}`;
+    const fontPx = Math.max(8, Math.min(10, 8 + cam.zoom * 0.7));
+    ctx.save();
+    ctx.font = `${fontPx}px Inter, sans-serif`;
+    const fullW = ctx.measureText(fullLabel).width;
+    const shortW = ctx.measureText(shortLabel).width;
+    ctx.restore();
+    const available = Math.max(14, len - pixelWidth * 1.5);
+    let label = fullLabel;
+    if (fullW > available) label = shortLabel;
+    if (shortW > available) label = compactLabel;
 
-    ctx.fillStyle = '#f0f6fc';
-    ctx.font = '12px sans-serif';
+    const midX = (s.x + e.x) / 2 + nx * Math.max(5, Math.min(11, pixelWidth * 0.45));
+    const midY = (s.y + e.y) / 2 + ny * Math.max(5, Math.min(11, pixelWidth * 0.45));
+    let labelAngle = angle;
+    if (labelAngle > Math.PI / 2 || labelAngle < -Math.PI / 2) labelAngle += Math.PI;
+    if (labelAngle > Math.PI) labelAngle -= Math.PI * 2;
+    if (labelAngle < -Math.PI) labelAngle += Math.PI * 2;
+    labelAngle = clamp(labelAngle, -Math.PI / 4, Math.PI / 4);
+
+    ctx.save();
+    ctx.translate(midX, midY);
+    ctx.rotate(labelAngle);
+    ctx.font = `${fontPx}px Inter, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-
-    // Background for text
-    const metrics = ctx.measureText(label);
-    const textW = metrics.width;
-    ctx.save();
-    ctx.fillStyle = 'rgba(13,17,23, 0.8)';
+    const textW = ctx.measureText(label).width;
+    ctx.fillStyle = 'rgba(13,17,23, 0.84)';
     ctx.beginPath();
-    ctx.roundRect(midX - textW / 2 - 4, midY - 10, textW + 8, 20, 4);
+    ctx.roundRect(-textW / 2 - 3, -6, textW + 6, 12, 3);
     ctx.fill();
+    ctx.fillStyle = '#f0f6fc';
+    ctx.fillText(label, 0, 0);
     ctx.restore();
-
-    ctx.fillText(label, midX, midY);
 
     // Distance label below
     // (Old distance label removed to avoid clutter)
@@ -1642,9 +1717,12 @@
       weight: conn.weight,
       congestion: conn.congestion,
       width: roundWidthMeters(conn.width || 1.2),
-      desiredDistance: roundDistanceMeters(dSrcMid / PIXELS_PER_METER),
       props: { ...conn.props },
     };
+    const conn1Specified = Number(conn.specifiedDistance);
+    if (Number.isFinite(conn1Specified) && conn1Specified > 0) {
+      conn1.specifiedDistance = roundDistanceMeters(dSrcMid / PIXELS_PER_METER);
+    }
     const conn2 = {
       id: state.nextConnId++,
       sourceId: newNode.id,
@@ -1656,9 +1734,12 @@
       weight: conn.weight,
       congestion: conn.congestion,
       width: roundWidthMeters(conn.width || 1.2),
-      desiredDistance: roundDistanceMeters(dMidTgt / PIXELS_PER_METER),
       props: { ...conn.props },
     };
+    const conn2Specified = Number(conn.specifiedDistance);
+    if (Number.isFinite(conn2Specified) && conn2Specified > 0) {
+      conn2.specifiedDistance = roundDistanceMeters(dMidTgt / PIXELS_PER_METER);
+    }
 
     // Remove old connection, add new ones
     state.connections = state.connections.filter(c => c.id !== conn.id);
@@ -1727,7 +1808,6 @@
       typeId: state.connTypes[0].id,
       direction: 'forward',
       distance: roundDistanceMeters(d / PIXELS_PER_METER),
-      desiredDistance: roundDistanceMeters(d / PIXELS_PER_METER),
       speed: 0,
       weight: 1,
       congestion: 'none',
@@ -1794,7 +1874,11 @@
       width: roundWidthMeters(((c1.width || 1.2) + (c2.width || 1.2)) / 2),
       props: { ...c1.props, ...c2.props },
     };
-    mergedConn.desiredDistance = mergedConn.distance;
+    const c1Specified = Number(c1.specifiedDistance);
+    const c2Specified = Number(c2.specifiedDistance);
+    if ((Number.isFinite(c1Specified) && c1Specified > 0) || (Number.isFinite(c2Specified) && c2Specified > 0)) {
+      mergedConn.specifiedDistance = mergedConn.distance;
+    }
     return mergedConn;
   }
 
@@ -1833,13 +1917,58 @@
       if (src && tgt) {
         // Distance in meters
         c.distance = roundDistanceMeters(dist(src, tgt) / PIXELS_PER_METER);
-        c.desiredDistance = c.distance;
       }
     });
     recalcFireSafety();
   }
 
+  const LENGTH_MISMATCH_TOLERANCE_M = 0.025;
+
+  function getConnectionActualDistanceMeters(conn) {
+    const explicit = Number(conn.distance);
+    if (Number.isFinite(explicit) && explicit > 0) {
+      return roundDistanceMeters(explicit);
+    }
+    const src = state.nodes.find(n => n.id === conn.sourceId);
+    const tgt = state.nodes.find(n => n.id === conn.targetId);
+    if (!src || !tgt) return 0;
+    return roundDistanceMeters(dist(src, tgt) / PIXELS_PER_METER);
+  }
+
+  function getConnectionSpecifiedDistanceMeters(conn) {
+    const specified = Number(conn.specifiedDistance);
+    if (Number.isFinite(specified) && specified > 0) {
+      return roundDistanceMeters(specified);
+    }
+    return null;
+  }
+
+  function getConnectionLengthDeltaInfo(conn) {
+    const actual = getConnectionActualDistanceMeters(conn);
+    const specified = getConnectionSpecifiedDistanceMeters(conn);
+    if (specified == null) {
+      return {
+        actual,
+        specified: null,
+        delta: 0,
+        mismatch: false,
+      };
+    }
+    const delta = roundDistanceMeters(actual - specified);
+    const mismatch = Math.abs(delta) > LENGTH_MISMATCH_TOLERANCE_M;
+    return {
+      actual,
+      specified,
+      delta,
+      mismatch,
+    };
+  }
+
   function getConnectionDesiredDistance(conn) {
+    const specified = Number(conn.specifiedDistance);
+    if (Number.isFinite(specified) && specified > 0) {
+      return roundDistanceMeters(specified);
+    }
     const fallback = Number(conn.distance);
     if (Number.isFinite(fallback) && fallback > 0) {
       return roundDistanceMeters(fallback);
@@ -1895,7 +2024,7 @@
     moving.x = snapToGrid(anchor.x + ux * targetPx);
     moving.y = snapToGrid(anchor.y + uy * targetPx);
     conn.distance = targetMeters;
-    conn.desiredDistance = targetMeters;
+    conn.specifiedDistance = targetMeters;
     return true;
   }
 
@@ -2142,33 +2271,70 @@
     });
   }
 
-  function getConnectionEvacuationSortKey(conn, nodeRank) {
+  function getConnectionEvacuationSortKey(conn, nodeMap, nodeRank) {
+    const src = nodeMap.get(conn.sourceId);
+    const tgt = nodeMap.get(conn.targetId);
+    const srcTime = Number.isFinite(Number(src?.maxTime)) ? Number(src.maxTime) : 0;
+    const tgtTime = Number.isFinite(Number(tgt?.maxTime)) ? Number(tgt.maxTime) : 0;
     const srcRank = nodeRank.get(conn.sourceId) ?? Number.MAX_SAFE_INTEGER;
     const tgtRank = nodeRank.get(conn.targetId) ?? Number.MAX_SAFE_INTEGER;
-    const dir = conn.direction || 'forward';
 
-    if (dir === 'backward') return [tgtRank, srcRank];
-    if (dir === 'both') return [Math.min(srcRank, tgtRank), Math.max(srcRank, tgtRank)];
-    return [srcRank, tgtRank];
+    let fromId = conn.sourceId;
+    let toId = conn.targetId;
+    let fromTime = srcTime;
+    let toTime = tgtTime;
+
+    const dir = conn.direction || 'forward';
+    if (dir === 'backward') {
+      fromId = conn.targetId;
+      toId = conn.sourceId;
+      fromTime = tgtTime;
+      toTime = srcTime;
+    } else if (dir === 'both') {
+      const swap = (tgtTime < srcTime - 1e-6) || (Math.abs(tgtTime - srcTime) <= 1e-6 && tgtRank < srcRank);
+      if (swap) {
+        fromId = conn.targetId;
+        toId = conn.sourceId;
+        fromTime = tgtTime;
+        toTime = srcTime;
+      }
+    }
+
+    return {
+      fromId,
+      toId,
+      fromRank: nodeRank.get(fromId) ?? Number.MAX_SAFE_INTEGER,
+      toRank: nodeRank.get(toId) ?? Number.MAX_SAFE_INTEGER,
+      fromTime,
+      toTime,
+    };
   }
 
-  function renumberGraphByEvacuationLogic() {
+  function compareConnectionsByEvacuationTraversal(a, b, nodeMap, nodeRank) {
+    const aKey = getConnectionEvacuationSortKey(a, nodeMap, nodeRank);
+    const bKey = getConnectionEvacuationSortKey(b, nodeMap, nodeRank);
+
+    if (Math.abs(aKey.fromTime - bKey.fromTime) > 1e-6) return aKey.fromTime - bKey.fromTime;
+    if (Math.abs(aKey.toTime - bKey.toTime) > 1e-6) return aKey.toTime - bKey.toTime;
+    if (aKey.fromRank !== bKey.fromRank) return aKey.fromRank - bKey.fromRank;
+    if (aKey.toRank !== bKey.toRank) return aKey.toRank - bKey.toRank;
+    const typeCmp = String(a.typeId || '').localeCompare(String(b.typeId || ''));
+    if (typeCmp !== 0) return typeCmp;
+    return a.id - b.id;
+  }
+
+  function renumberGraphByEvacuationLogic(options = {}) {
+    const { skipHistory = false, skipRender = false } = options;
     if (state.nodes.length === 0 && state.connections.length === 0) return;
 
     recalcPeopleCounts();
 
     const orderedNodes = getEvacuationOrderedNodes();
+    const nodeMap = new Map(state.nodes.map(n => [n.id, n]));
     const nodeRank = new Map(orderedNodes.map((n, idx) => [n.id, idx]));
-    const orderedConnections = [...state.connections].sort((a, b) => {
-      const [aFrom, aTo] = getConnectionEvacuationSortKey(a, nodeRank);
-      const [bFrom, bTo] = getConnectionEvacuationSortKey(b, nodeRank);
-
-      if (aFrom !== bFrom) return aFrom - bFrom;
-      if (aTo !== bTo) return aTo - bTo;
-      const typeCmp = String(a.typeId || '').localeCompare(String(b.typeId || ''));
-      if (typeCmp !== 0) return typeCmp;
-      return a.id - b.id;
-    });
+    const orderedConnections = [...state.connections].sort((a, b) => (
+      compareConnectionsByEvacuationTraversal(a, b, nodeMap, nodeRank)
+    ));
 
     const nodeIdMap = new Map();
     orderedNodes.forEach((node, idx) => {
@@ -2224,8 +2390,8 @@
     sanitizeSelection();
     recalcPeopleCounts();
     updatePropertiesPanel();
-    commitHistory();
-    render();
+    if (!skipHistory) commitHistory();
+    if (!skipRender) render();
   }
 
   // ─── Selection ────────────────────────────────────────────
@@ -2810,7 +2976,7 @@
     cam.y = my - (my - cam.y) * ratio;
     cam.zoom = newZoom;
 
-    document.getElementById('zoomLevel').textContent = Math.round(cam.zoom * 100) + '%';
+    setZoomLevelDisplay();
     render();
   }, { passive: false });
 
@@ -2839,6 +3005,9 @@
       case 'o': setTool('addDoor'); break;
       case 'c': setTool('connect'); break;
       case 'd': setTool('delete'); break;
+      case 'f':
+        zoomToFitGraph();
+        break;
       case 'r':
         renumberGraphByEvacuationLogic();
         break;
@@ -2900,6 +3069,12 @@
   if (btnRenumber) {
     btnRenumber.addEventListener('click', () => {
       renumberGraphByEvacuationLogic();
+    });
+  }
+
+  if (btnZoomFit) {
+    btnZoomFit.addEventListener('click', () => {
+      zoomToFitGraph();
     });
   }
 
@@ -2993,6 +3168,15 @@
           if (data.connections) {
             state.connections = data.connections.map((c) => {
               const next = { ...c };
+              const specified = Number(next.specifiedDistance);
+              const legacyDesired = Number(next.desiredDistance);
+              if (Number.isFinite(specified) && specified > 0) {
+                next.specifiedDistance = roundDistanceMeters(specified);
+              } else if (Number.isFinite(legacyDesired) && legacyDesired > 0) {
+                next.specifiedDistance = roundDistanceMeters(legacyDesired);
+              } else {
+                delete next.specifiedDistance;
+              }
               delete next.distanceManual;
               delete next.desiredDistance;
               return next;
@@ -3007,7 +3191,13 @@
           state.nextConnId = Math.max(0, ...state.connections.map(c => c.id)) + 1;
           updateConnectionDistances();
           recalcPeopleCounts();
-          clearSelection();
+          runOrderGraphIterations(220);
+          renumberGraphByEvacuationLogic({ skipHistory: true, skipRender: true });
+          selectedItems.clear();
+          connectSource = null;
+          sanitizeSelection();
+          updatePropertiesPanel();
+          zoomToFitGraph({ skipRender: true });
           renderLegend();
           commitHistory();
           render();
@@ -3044,6 +3234,8 @@
     const rect = container.getBoundingClientRect();
     cam.x = rect.width / 2;
     cam.y = rect.height / 2;
+    cam.zoom = 1;
+    setZoomLevelDisplay();
 
     container.setAttribute('data-tool', tool);
     resizeCanvas();
@@ -3081,6 +3273,7 @@
   const repGeneratedAt = document.getElementById('repGeneratedAt');
   const reportExecutiveSummary = document.getElementById('reportExecutiveSummary');
   const reportMetaGrid = document.getElementById('reportMetaGrid');
+  const reportTableHead = document.getElementById('reportTableHead');
   const reportTableBody = document.getElementById('reportTableBody');
   const mathProofContent = document.getElementById('mathProofContent');
   const reportCanvas = document.getElementById('reportCanvas');
@@ -3129,30 +3322,17 @@
   }
 
   function connectionSeverityLabel(severity) {
+    if (severity === 'n_a') return 'N/A';
+    if (severity === 'queued') return 'Queue';
     if (severity === 'blocked') return 'Blocked';
-    if (severity === 'very_high') return 'Very High';
-    if (severity === 'high') return 'High';
-    if (severity === 'medium') return 'Medium';
     return 'None';
   }
 
-  function getConnectionSeverity(conn, q, qMax, density) {
+  function getConnectionSeverity(conn, method, flowState = conn.flowState || {}) {
+    if (method !== 'B') return 'n_a';
     if ((conn.congestion || 'none') === 'blocked') return 'blocked';
-    if (conn.flowState && conn.flowState.hasQueue) return 'very_high';
-
-    if (Number.isFinite(q) && Number.isFinite(qMax) && qMax > 0) {
-      const ratio = q / qMax;
-      if (ratio >= 0.95) return 'very_high';
-      if (ratio >= 0.8) return 'high';
-      if (ratio >= 0.6) return 'medium';
-      return 'none';
-    }
-
-    if (Number.isFinite(density)) {
-      if (density >= 5) return 'very_high';
-      if (density >= 3.5) return 'high';
-      if (density >= 2) return 'medium';
-    }
+    if (flowState && flowState.hasQueue) return 'queued';
+    if ((conn.congestion || 'none') !== 'none') return 'queued';
     return 'none';
   }
 
@@ -3192,21 +3372,13 @@
     const exits = state.nodes.filter(n => n.typeId === 'exit');
     const totalTime = Number(state.totalEvacuationTime) || 0;
     const criticalExits = exits.filter(e => Math.abs((Number(e.maxTime) || 0) - totalTime) < 0.01);
+    const method = state.calculationMethod === 'B' ? 'B' : 'A';
 
-    const sortedConns = [...state.connections].sort((a, b) => {
-      const srcA = nodeMap.get(a.sourceId);
-      const srcB = nodeMap.get(b.sourceId);
-      const srcTimeA = srcA ? (Number(srcA.maxTime) || 0) : 0;
-      const srcTimeB = srcB ? (Number(srcB.maxTime) || 0) : 0;
-      if (srcTimeA !== srcTimeB) return srcTimeA - srcTimeB;
-
-      const tgtA = nodeMap.get(a.targetId);
-      const tgtB = nodeMap.get(b.targetId);
-      const tgtTimeA = tgtA ? (Number(tgtA.maxTime) || 0) : 0;
-      const tgtTimeB = tgtB ? (Number(tgtB.maxTime) || 0) : 0;
-      if (tgtTimeA !== tgtTimeB) return tgtTimeA - tgtTimeB;
-      return (a.id || 0) - (b.id || 0);
-    });
+    const orderedNodes = getEvacuationOrderedNodes();
+    const nodeRank = new Map(orderedNodes.map((n, idx) => [n.id, idx]));
+    const sortedConns = [...state.connections].sort((a, b) => (
+      compareConnectionsByEvacuationTraversal(a, b, nodeMap, nodeRank)
+    ));
 
     const rows = [];
     sortedConns.forEach((conn, idx) => {
@@ -3217,25 +3389,30 @@
       const ct = connTypeMap.get(conn.typeId) || { name: conn.typeId || 'normal', color: '#8b949e', dash: [] };
       const limits = getLimitParams(conn.typeId);
 
-      const connDist = Number(conn.distance);
-      const length = Number.isFinite(connDist) && connDist >= 0
-        ? roundDistanceMeters(connDist)
-        : roundDistanceMeters(dist(src, tgt) / PIXELS_PER_METER);
-      conn.desiredDistance = length;
-
-      const desiredLength = length;
-      const deltaLength = 0;
+      const lengthInfo = getConnectionLengthDeltaInfo(conn);
+      const length = lengthInfo.actual;
+      const specifiedLength = lengthInfo.specified;
+      const deltaLength = lengthInfo.delta;
+      const lengthMismatch = lengthInfo.mismatch;
 
       const width = Math.max(0.05, roundWidthMeters(Number(conn.width) || 1.2));
       const stats = conn.calcStats || {};
       const flow = conn.flowState || {};
       const dyn = conn.dynamicStats || {};
 
-      const density = Number.isFinite(Number(stats.density)) ? Number(stats.density) : 0;
-      const q = Number.isFinite(Number(stats.q)) ? Number(stats.q) : (Number(flow.q_spec) || 0);
-      const Q = Number.isFinite(Number(stats.Q))
+      const densityRaw = Number.isFinite(Number(stats.density)) ? Number(stats.density) : null;
+      const flowQSpec = Number(flow.q_spec);
+      const flowQOut = Number(flow.Q_out);
+      const flowQIn = Number(flow.Q_in);
+      const qRaw = Number.isFinite(Number(stats.q))
+        ? Number(stats.q)
+        : (Number.isFinite(flowQSpec) ? flowQSpec : null);
+      const QRaw = Number.isFinite(Number(stats.Q))
         ? Number(stats.Q)
-        : (Number(flow.Q_out) || Number(flow.Q_in) || 0);
+        : (Number.isFinite(flowQOut) ? flowQOut : (Number.isFinite(flowQIn) ? flowQIn : null));
+      const density = method === 'A' ? densityRaw : null;
+      const q = method === 'B' ? qRaw : null;
+      const Q = method === 'B' ? QRaw : null;
 
       const qMax = Number.isFinite(Number(stats.q_max)) ? Number(stats.q_max) : (Number(limits.q_max) || 0);
       const qGran = Number.isFinite(Number(stats.q_gran)) ? Number(stats.q_gran) : (Number(limits.q_gran) || 0);
@@ -3247,10 +3424,12 @@
       let time = Number(stats.time);
       if (!Number.isFinite(time) || time < 0) time = Number(conn.travelTime) || 0;
 
-      const severity = getConnectionSeverity(conn, q, qMax, density);
-      const rowClass = (severity === 'blocked' || severity === 'very_high')
-        ? 'report-row-risk'
-        : (severity === 'high' || severity === 'medium' ? 'report-row-warning' : '');
+      const severity = getConnectionSeverity(conn, method, flow);
+      const rowClassList = [];
+      if (severity === 'blocked') rowClassList.push('report-row-risk');
+      else if (severity === 'queued') rowClassList.push('report-row-warning');
+      if (lengthMismatch) rowClassList.push('report-row-length-warning');
+      const rowClass = rowClassList.join(' ');
 
       const peopleIn = Number.isFinite(Number(dyn.N_total))
         ? Number(dyn.N_total)
@@ -3270,8 +3449,9 @@
         direction: conn.direction || 'forward',
         directionLabel: connectionDirectionLabel(conn.direction || 'forward'),
         length,
-        desiredLength,
+        specifiedLength,
         deltaLength,
+        lengthMismatch,
         width,
         peopleIn,
         density,
@@ -3291,16 +3471,21 @@
       });
     });
 
-    const bottleneckCount = rows.filter(r => r.severity === 'blocked' || r.severity === 'very_high' || r.hasQueue).length;
+    const bottleneckCount = rows.filter(r => r.severity === 'blocked' || r.severity === 'queued' || r.hasQueue).length;
     const blockedCount = rows.filter(r => r.severity === 'blocked').length;
     const queueCount = rows.filter(r => r.hasQueue).length;
+    const lengthMismatchCount = rows.filter(r => r.lengthMismatch).length;
     const totalLength = rows.reduce((sum, r) => sum + (Number(r.length) || 0), 0);
     const avgWidth = rows.length > 0 ? rows.reduce((sum, r) => sum + (Number(r.width) || 0), 0) / rows.length : 0;
-    const avgDensity = rows.length > 0 ? rows.reduce((sum, r) => sum + (Number(r.density) || 0), 0) / rows.length : 0;
+    const avgDensity = method === 'A'
+      ? (rows.length > 0 ? rows.reduce((sum, r) => sum + (Number(r.density) || 0), 0) / rows.length : 0)
+      : null;
     const avgSpeed = rows.length > 0 ? rows.reduce((sum, r) => sum + (Number(r.speed) || 0), 0) / rows.length : 0;
 
     const maxTimeRow = rows.reduce((best, row) => (!best || row.time > best.time ? row : best), null);
-    const maxDensityRow = rows.reduce((best, row) => (!best || row.density > best.density ? row : best), null);
+    const maxDensityRow = method === 'A'
+      ? rows.reduce((best, row) => (!best || (Number(row.density) || 0) > (Number(best.density) || 0) ? row : best), null)
+      : null;
 
     const graphSizeLabel = `${formatNumeric(bounds.widthM, 2, '0.00')} m x ${formatNumeric(bounds.heightM, 2, '0.00')} m`;
     const methodLabel = state.calculationMethod === 'B'
@@ -3314,6 +3499,7 @@
       bounds,
       graphSizeLabel,
       methodLabel,
+      method,
       totalPeople,
       totalTime,
       criticalExits,
@@ -3323,6 +3509,7 @@
       bottleneckCount,
       blockedCount,
       queueCount,
+      lengthMismatchCount,
       totalLength,
       avgWidth,
       avgDensity,
@@ -3360,20 +3547,25 @@
     const longest = report.maxTimeRow
       ? `Connection #${report.maxTimeRow.connId} (${report.maxTimeRow.fromName} -> ${report.maxTimeRow.toName}) at ${formatNumeric(report.maxTimeRow.time, 3, '0.000')} min`
       : 'No segment data is available yet.';
-    const densest = report.maxDensityRow
-      ? `Connection #${report.maxDensityRow.connId} has the highest density at ${formatNumeric(report.maxDensityRow.density, 2)} p/m2`
-      : 'No density data available.';
 
     const riskLine = report.bottleneckCount > 0
       ? `${report.bottleneckCount} bottleneck segments were found (${report.blockedCount} blocked, ${report.queueCount} with queues).`
       : 'No bottlenecks or blocked segments were detected.';
+    const densityLine = (report.method === 'A' && report.maxDensityRow)
+      ? `Connection #${report.maxDensityRow.connId} has the highest density at ${formatNumeric(report.maxDensityRow.density, 2)} p/m2.`
+      : '';
+    const lengthWarningLine = report.lengthMismatchCount > 0
+      ? `${report.lengthMismatchCount} connections deviate from user-specified length and are currently highlighted as warnings.`
+      : '';
 
     if (reportExecutiveSummary) {
       reportExecutiveSummary.innerHTML = [
         `<p><strong>Outcome:</strong> Total evacuation time is <strong>${formatNumeric(report.totalTime, 3, '0.000')} min</strong> for <strong>${Math.round(report.totalPeople)}</strong> people using <strong>${escHtml(report.methodLabel)}</strong>.</p>`,
-        `<p><strong>Risk Profile:</strong> ${escHtml(riskLine)} ${escHtml(densest)}.</p>`,
+        `<p><strong>Risk Profile:</strong> ${escHtml(riskLine)}</p>`,
+        densityLine ? `<p><strong>Density:</strong> ${escHtml(densityLine)}</p>` : '',
+        lengthWarningLine ? `<p><strong>Length Warning:</strong> ${escHtml(lengthWarningLine)}</p>` : '',
         `<p><strong>Geometry:</strong> The graph covers <strong>${escHtml(report.graphSizeLabel)}</strong> with ${report.rows.length} modeled connections. Longest segment time contribution: ${escHtml(longest)}.</p>`,
-      ].join('');
+      ].filter(Boolean).join('');
     }
 
     if (reportMetaGrid) {
@@ -3390,10 +3582,13 @@
         ['Pinned Nodes', String(report.nodeCounts.pinned)],
         ['Total Connection Length', `${formatNumeric(report.totalLength, 2, '0.00')} m`],
         ['Average Width', `${formatNumeric(report.avgWidth, 2, '0.00')} m`],
-        ['Average Density', `${formatNumeric(report.avgDensity, 2, '0.00')} p/m2`],
         ['Average Speed', `${formatNumeric(report.avgSpeed, 2, '0.00')} m/min`],
+        ['Length Mismatch Warnings', String(report.lengthMismatchCount)],
         ['Ordering', report.orderGraphEnabled ? 'Enabled' : 'Disabled'],
       ];
+      if (report.method === 'A') {
+        metaItems.splice(11, 0, ['Average Density', `${formatNumeric(report.avgDensity, 2, '0.00')} p/m2`]);
+      }
 
       reportMetaGrid.innerHTML = metaItems.map(([label, value]) => `
         <div class="report-meta-item">
@@ -3481,10 +3676,9 @@
     }
 
     const severityColor = {
+      n_a: '#58a6ff',
       none: '#58a6ff',
-      medium: '#e3b341',
-      high: '#d29922',
-      very_high: '#f0883e',
+      queued: '#e3b341',
       blocked: '#f85149',
     };
 
@@ -3496,15 +3690,22 @@
       const len = Math.hypot(dx, dy);
       if (len < 1e-6) return;
 
-      const lineColor = row.severity === 'none' ? (row.typeColor || severityColor.none) : severityColor[row.severity];
+      const isStairs = row.conn && (row.conn.typeId === 'stairs_up' || row.conn.typeId === 'stairs_down');
+      const baseTypeColor = row.typeColor || severityColor.none;
+      const lineColor = (row.severity === 'none' || row.severity === 'n_a')
+        ? baseTypeColor
+        : (severityColor[row.severity] || baseTypeColor);
       const lineWidth = Math.max(1.8, Math.min(20, row.width * PIXELS_PER_METER * scale));
 
       repCtx.save();
       repCtx.strokeStyle = lineColor;
-      repCtx.lineWidth = lineWidth;
+      repCtx.lineWidth = isStairs ? lineWidth * 1.05 : lineWidth;
       repCtx.lineCap = 'round';
       repCtx.globalAlpha = 0.85;
-      if (row.typeDash.length) {
+      if (isStairs) {
+        if (row.conn.typeId === 'stairs_up') repCtx.setLineDash([Math.max(6, 8 * scale), Math.max(4, 5 * scale)]);
+        else repCtx.setLineDash([Math.max(2, 3 * scale), Math.max(4, 6 * scale)]);
+      } else if (row.typeDash.length) {
         repCtx.setLineDash(row.typeDash.map(v => Math.max(2, v * scale)));
       } else {
         repCtx.setLineDash([]);
@@ -3514,6 +3715,29 @@
       repCtx.lineTo(t.x, t.y);
       repCtx.stroke();
       repCtx.restore();
+
+      if (isStairs) {
+        const ux = dx / len;
+        const uy = dy / len;
+        const nx = -uy;
+        const ny = ux;
+        const markCount = Math.max(3, Math.min(32, Math.floor(len / 18)));
+        const markHalf = Math.max(3, Math.min(10, lineWidth * 0.42));
+        repCtx.save();
+        repCtx.strokeStyle = isLight ? 'rgba(15,23,42,0.55)' : 'rgba(248,250,252,0.55)';
+        repCtx.lineWidth = Math.max(1, lineWidth * 0.2);
+        repCtx.setLineDash([]);
+        for (let i = 1; i < markCount; i++) {
+          const d = (len * i) / markCount;
+          const cx = s.x + ux * d;
+          const cy = s.y + uy * d;
+          repCtx.beginPath();
+          repCtx.moveTo(cx - nx * markHalf, cy - ny * markHalf);
+          repCtx.lineTo(cx + nx * markHalf, cy + ny * markHalf);
+          repCtx.stroke();
+        }
+        repCtx.restore();
+      }
 
       if (row.severity === 'blocked') {
         const ux = dx / len;
@@ -3564,20 +3788,46 @@
         drawArrow(s.x + Math.cos(angle) * arrowInset, s.y + Math.sin(angle) * arrowInset, angle + Math.PI);
       }
 
-      const label = `${formatNumeric(row.length, 2)}m ${formatNumeric(row.time, 3)}min`;
-      const lx = (s.x + t.x) * 0.5;
-      const ly = (s.y + t.y) * 0.5;
+      const fullLabel = `L=${formatNumeric(row.length, 2)}m, t=${formatNumeric(row.time, 3)}min`;
+      const shortLabel = `L=${formatNumeric(row.length, 2)}, t=${formatNumeric(row.time, 3)}`;
+      const compactLabel = `L=${formatNumeric(row.length, 2)},t=${formatNumeric(row.time, 3)}`;
+      const labelFontPx = 8;
       repCtx.save();
-      repCtx.font = '9px Inter, sans-serif';
+      repCtx.font = `${labelFontPx}px Inter, sans-serif`;
+      const fullW = repCtx.measureText(fullLabel).width;
+      const shortW = repCtx.measureText(shortLabel).width;
+      repCtx.restore();
+      const available = Math.max(18, len - lineWidth * 1.6);
+      let label = fullLabel;
+      if (fullW > available) label = shortLabel;
+      if (shortW > available) label = compactLabel;
+
+      const ux = dx / len;
+      const uy = dy / len;
+      const nx = -uy;
+      const ny = ux;
+      const labelOffset = Math.max(6, Math.min(12, lineWidth * 0.55));
+      const lx = (s.x + t.x) * 0.5 + nx * labelOffset;
+      const ly = (s.y + t.y) * 0.5 + ny * labelOffset;
+      let labelAngle = angle;
+      if (labelAngle > Math.PI / 2 || labelAngle < -Math.PI / 2) labelAngle += Math.PI;
+      if (labelAngle > Math.PI) labelAngle -= Math.PI * 2;
+      if (labelAngle < -Math.PI) labelAngle += Math.PI * 2;
+      labelAngle = clamp(labelAngle, -Math.PI / 4, Math.PI / 4);
+
+      repCtx.save();
+      repCtx.translate(lx, ly);
+      repCtx.rotate(labelAngle);
+      repCtx.font = `${labelFontPx}px Inter, sans-serif`;
       repCtx.textAlign = 'center';
       repCtx.textBaseline = 'middle';
       const tw = repCtx.measureText(label).width;
       repCtx.fillStyle = isLight ? 'rgba(248,250,252,0.9)' : 'rgba(13,17,23,0.86)';
       repCtx.beginPath();
-      repCtx.roundRect(lx - tw / 2 - 4, ly - 7, tw + 8, 14, 3);
+      repCtx.roundRect(-tw / 2 - 3, -6, tw + 6, 12, 3);
       repCtx.fill();
       repCtx.fillStyle = isLight ? '#1f2937' : '#e5e7eb';
-      repCtx.fillText(label, lx, ly);
+      repCtx.fillText(label, 0, 0);
       repCtx.restore();
     });
 
@@ -3614,6 +3864,18 @@
         repCtx.lineWidth = 1;
         repCtx.stroke();
       }
+      repCtx.restore();
+
+      const peopleCount = Number.isFinite(Number(node.people)) ? Number(node.people) : 0;
+      const peopleLabel = Math.abs(peopleCount - Math.round(peopleCount)) < 0.01
+        ? String(Math.round(peopleCount))
+        : formatNumeric(peopleCount, 2, '0');
+      repCtx.save();
+      repCtx.font = `${Math.max(7, Math.min(9.5, nodeRadius * 0.92))}px Inter, sans-serif`;
+      repCtx.fillStyle = isLight ? '#0f172a' : '#f8fafc';
+      repCtx.textAlign = 'center';
+      repCtx.textBaseline = 'middle';
+      repCtx.fillText(peopleLabel, p.x, p.y);
       repCtx.restore();
 
       repCtx.save();
@@ -3655,43 +3917,101 @@
     repCtx.restore();
   }
 
+  function getReportTableColumns(report = lastReportContext) {
+    const method = report?.method || (state.calculationMethod === 'B' ? 'B' : 'A');
+    const showDensity = method === 'A';
+    const showFlow = method === 'B';
+    const showLengthWarnings = !!(report && report.lengthMismatchCount > 0);
+
+    const cols = [
+      { key: 'step', label: 'Step', align: 'center' },
+      { key: 'conn', label: 'Conn', align: 'center' },
+      { key: 'from', label: 'From', align: 'left' },
+      { key: 'to', label: 'To', align: 'left' },
+      { key: 'type', label: 'Type', align: 'left' },
+      { key: 'dir', label: 'Dir', align: 'center' },
+      { key: 'length', label: 'Length (m)', align: 'right' },
+      { key: 'width', label: 'Width (m)', align: 'right' },
+      { key: 'people', label: 'People In', align: 'right' },
+    ];
+
+    if (showDensity) {
+      cols.push({ key: 'density', label: 'Density', align: 'right' });
+    }
+    if (showFlow) {
+      cols.push({ key: 'q', label: 'q', align: 'right' });
+      cols.push({ key: 'Q', label: 'Q', align: 'right' });
+    }
+
+    cols.push({ key: 'speed', label: 'Speed', align: 'right' });
+    cols.push({ key: 'time', label: 'Time (min)', align: 'right' });
+    if (showLengthWarnings) {
+      cols.push({ key: 'lengthWarning', label: 'Length Warning', align: 'left' });
+    }
+    cols.push({ key: 'congestion', label: 'Congestion', align: 'center' });
+    return cols;
+  }
+
+  function getReportTableCellText(row, key) {
+    const peopleText = Number.isFinite(row.peopleIn)
+      ? (Math.abs(row.peopleIn - Math.round(row.peopleIn)) < 0.01
+        ? String(Math.round(row.peopleIn))
+        : formatNumeric(row.peopleIn, 2))
+      : '--';
+    const timeText = row.time >= 9999 ? 'Inf' : formatNumeric(row.time, 3);
+
+    if (key === 'step') return String(row.step);
+    if (key === 'conn') return `#${row.connId}`;
+    if (key === 'from') return row.fromName;
+    if (key === 'to') return row.toName;
+    if (key === 'type') return row.typeName;
+    if (key === 'dir') return row.directionLabel;
+    if (key === 'length') return formatNumeric(row.length, 2);
+    if (key === 'width') return formatNumeric(row.width, 2);
+    if (key === 'people') return peopleText;
+    if (key === 'density') return formatNumeric(row.density, 2);
+    if (key === 'q') return formatNumeric(row.q, 2);
+    if (key === 'Q') return formatNumeric(row.Q, 2);
+    if (key === 'speed') return formatNumeric(row.speed, 2);
+    if (key === 'time') return timeText;
+    if (key === 'lengthWarning') {
+      if (!row.lengthMismatch) return '-';
+      return `Specified ${formatNumeric(row.specifiedLength, 2)} m, using ${formatNumeric(row.length, 2)} m`;
+    }
+    if (key === 'congestion') return row.severityLabel;
+    return '';
+  }
+
+  function getReportTableCellHtml(row, key) {
+    if (key === 'congestion') {
+      return `<span class="report-badge badge-${row.severity}">${escHtml(row.severityLabel)}</span>`;
+    }
+    if (key === 'lengthWarning' && row.lengthMismatch) {
+      return `<span class="report-inline-warning">${escHtml(getReportTableCellText(row, key))}</span>`;
+    }
+    return escHtml(getReportTableCellText(row, key));
+  }
+
   function generateReportTable(report = lastReportContext) {
     if (!reportTableBody) return;
+    const columns = getReportTableColumns(report);
+
+    if (reportTableHead) {
+      reportTableHead.innerHTML = `<tr>${columns.map((col) => (
+        `<th class="align-${col.align}">${escHtml(col.label)}</th>`
+      )).join('')}</tr>`;
+    }
+
     if (!report || report.rows.length === 0) {
-      reportTableBody.innerHTML = '<tr><td colspan="17">No connection data available.</td></tr>';
+      reportTableBody.innerHTML = `<tr><td colspan="${columns.length}">No connection data available.</td></tr>`;
       return;
     }
 
-    reportTableBody.innerHTML = report.rows.map((row) => {
-      const desiredText = formatNumeric(row.length, 2);
-      const deltaText = '0.00';
-      const peopleText = Number.isFinite(row.peopleIn)
-        ? (Math.abs(row.peopleIn - Math.round(row.peopleIn)) < 0.01
-          ? String(Math.round(row.peopleIn))
-          : formatNumeric(row.peopleIn, 2))
-        : '--';
-      const timeText = row.time >= 9999 ? 'Inf' : formatNumeric(row.time, 3);
-
-      return `<tr class="${row.rowClass}">
-        <td>${row.step}</td>
-        <td>#${row.connId}</td>
-        <td>${escHtml(row.fromName)}</td>
-        <td>${escHtml(row.toName)}</td>
-        <td>${escHtml(row.typeName)}</td>
-        <td>${row.directionLabel}</td>
-        <td>${formatNumeric(row.length, 2)}</td>
-        <td>${desiredText}</td>
-        <td>${deltaText}</td>
-        <td>${formatNumeric(row.width, 2)}</td>
-        <td>${peopleText}</td>
-        <td>${formatNumeric(row.density, 2)}</td>
-        <td>${formatNumeric(row.q, 2)}</td>
-        <td>${formatNumeric(row.Q, 2)}</td>
-        <td>${formatNumeric(row.speed, 2)}</td>
-        <td>${timeText}</td>
-        <td><span class="report-badge badge-${row.severity}">${escHtml(row.severityLabel)}</span></td>
-      </tr>`;
-    }).join('');
+    reportTableBody.innerHTML = report.rows.map((row) => (
+      `<tr class="${row.rowClass}">
+        ${columns.map((col) => `<td class="align-${col.align}">${getReportTableCellHtml(row, col.key)}</td>`).join('')}
+      </tr>`
+    )).join('');
   }
 
   function generateMathProof(report = lastReportContext) {
@@ -3710,6 +4030,9 @@
     lines.push(`Total Evacuation Time: ${formatNumeric(report.totalTime, 3, '0.000')} min`);
     lines.push(`Connections Reviewed: ${report.rows.length}`);
     lines.push(`Bottlenecks: ${report.bottleneckCount} (blocked: ${report.blockedCount}, queued: ${report.queueCount})`);
+    if (report.lengthMismatchCount > 0) {
+      lines.push(`Length Warnings: ${report.lengthMismatchCount} connections deviate from user-specified length.`);
+    }
     lines.push('');
     lines.push('REGULATORY BASELINE');
     lines.push('- Regulation Source: Ordinance Iz-1971, Annex 8a');
@@ -3728,7 +4051,9 @@
       lines.push(`Segment ${row.step} | Connection #${row.connId} | ${row.fromName} -> ${row.toName}`);
       lines.push(`  Type: ${row.typeName} | Direction: ${row.directionLabel}`);
       lines.push(`  Geometry: L=${formatNumeric(row.length, 2)} m, W=${formatNumeric(row.width, 2)} m`);
-      lines.push(`  Length Policy: desired length equals actual length (${formatNumeric(row.length, 2)} m).`);
+      if (row.lengthMismatch) {
+        lines.push(`  WARNING: specified length ${formatNumeric(row.specifiedLength, 2)} m differs from used length ${formatNumeric(row.length, 2)} m.`);
+      }
       lines.push(`  Input People Basis: ${formatNumeric(row.peopleIn, 2)} persons`);
 
       if (state.calculationMethod === 'B') {
@@ -3806,35 +4131,11 @@
     render();
     const proofHtml = escHtml(mathProofContent ? mathProofContent.textContent : '').replace(/\n/g, '<br>');
 
-    const tableRows = report.rows.map((row) => {
-      const desiredText = formatNumeric(row.length, 2);
-      const deltaText = '0.00';
-      const peopleText = Number.isFinite(row.peopleIn)
-        ? (Math.abs(row.peopleIn - Math.round(row.peopleIn)) < 0.01
-          ? String(Math.round(row.peopleIn))
-          : formatNumeric(row.peopleIn, 2))
-        : '--';
-      const timeText = row.time >= 9999 ? 'Inf' : formatNumeric(row.time, 3);
-      return `<tr>
-        <td>${row.step}</td>
-        <td>#${row.connId}</td>
-        <td>${escHtml(row.fromName)}</td>
-        <td>${escHtml(row.toName)}</td>
-        <td>${escHtml(row.typeName)}</td>
-        <td>${row.directionLabel}</td>
-        <td>${formatNumeric(row.length, 2)}</td>
-        <td>${desiredText}</td>
-        <td>${deltaText}</td>
-        <td>${formatNumeric(row.width, 2)}</td>
-        <td>${peopleText}</td>
-        <td>${formatNumeric(row.density, 2)}</td>
-        <td>${formatNumeric(row.q, 2)}</td>
-        <td>${formatNumeric(row.Q, 2)}</td>
-        <td>${formatNumeric(row.speed, 2)}</td>
-        <td>${timeText}</td>
-        <td>${escHtml(row.severityLabel)}</td>
-      </tr>`;
-    }).join('');
+    const tableColumns = getReportTableColumns(report);
+    const tableHeaderHtml = tableColumns.map((col) => `<th>${escHtml(col.label)}</th>`).join('');
+    const tableRows = report.rows.map((row) => (
+      `<tr>${tableColumns.map((col) => `<td>${escHtml(getReportTableCellText(row, col.key))}</td>`).join('')}</tr>`
+    )).join('');
 
     const meta = report.metadata || {};
     const summaryItems = [
@@ -3845,6 +4146,7 @@
       ['Bottlenecks', String(report.bottleneckCount)],
       ['Blocked', String(report.blockedCount)],
       ['Queued', String(report.queueCount)],
+      ['Length Warnings', String(report.lengthMismatchCount)],
       ['Graph Size', report.graphSizeLabel],
       ['Method', report.methodLabel],
       ['Generated', report.generatedAtDisplay],
@@ -3932,28 +4234,10 @@
     <h2>Detailed Connection Table</h2>
     <table>
       <thead>
-        <tr>
-          <th>Step</th>
-          <th>Conn</th>
-          <th>From</th>
-          <th>To</th>
-          <th>Type</th>
-          <th>Dir</th>
-          <th>Length (m)</th>
-          <th>Desired (m)</th>
-          <th>Delta (m)</th>
-          <th>Width (m)</th>
-          <th>People In</th>
-          <th>Density</th>
-          <th>q</th>
-          <th>Q</th>
-          <th>Speed</th>
-          <th>Time (min)</th>
-          <th>Congestion</th>
-        </tr>
+        <tr>${tableHeaderHtml}</tr>
       </thead>
       <tbody>
-        ${tableRows || '<tr><td colspan="17">No connection data available.</td></tr>'}
+        ${tableRows || `<tr><td colspan="${tableColumns.length}">No connection data available.</td></tr>`}
       </tbody>
     </table>
   </div>
@@ -4183,6 +4467,20 @@
           render();
         }
       }, false, '0.05'));
+
+      const mismatchItems = selConns
+        .map((c) => ({ conn: c, info: getConnectionLengthDeltaInfo(c) }))
+        .filter((x) => x.info.mismatch);
+      if (mismatchItems.length > 0) {
+        const warn = document.createElement('div');
+        warn.className = 'prop-inline-warning';
+        const preview = mismatchItems.slice(0, 3).map((x) => (
+          `#${x.conn.id}: ${formatNumeric(x.info.specified, 2)} -> ${formatNumeric(x.info.actual, 2)} m`
+        )).join('; ');
+        const suffix = mismatchItems.length > 3 ? ` (+${mismatchItems.length - 3} more)` : '';
+        warn.textContent = `Warning: ${mismatchItems.length} selected connection lengths differ from specified values. ${preview}${suffix}`;
+        section.appendChild(warn);
+      }
 
       propsContent.appendChild(section);
     }
