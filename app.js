@@ -46,10 +46,14 @@
   const ZOOM_MIN = 0.1, ZOOM_MAX = 5;
 
   // Constants
-  const GRID_SIZE = 20; // cm (visual grid)
-  const PIXELS_PER_METER = 20; // 1m = 20px
+  const PIXELS_PER_METER = 30; // 1m = 30px, tuned for 20-30m schematics
+  const GRID_SIZE_METERS = 0.1; // 20cm snapping to hit 1.2m/2.4m increments
+  const GRID_SIZE = GRID_SIZE_METERS * PIXELS_PER_METER;
 
   const NODE_RADIUS = 15;
+  const NODE_RADIUS_MIN_PX = 7;
+  const NODE_RADIUS_MAX_PX = 32;
+  const NODE_ZOOM_CURVE = 0.65;
   const HIT_MARGIN = 5;
 
   function snapToGrid(v) {
@@ -101,6 +105,13 @@
   const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
   const lerp = (a, b, t) => a + (b - a) * t;
   const uid = () => Math.random().toString(36).slice(2, 9);
+  const roundDistanceMeters = (m) => Math.round(m * 10) / 10; // 0.1m precision
+  const roundWidthMeters = (m) => Math.round(m * 20) / 20; // 0.05m precision
+
+  function getNodeRadiusPx(zoom = cam.zoom) {
+    const scaled = NODE_RADIUS * Math.pow(Math.max(zoom, 0.01), NODE_ZOOM_CURVE);
+    return Math.max(NODE_RADIUS_MIN_PX, Math.min(NODE_RADIUS_MAX_PX, scaled));
+  }
 
   function screenToWorld(sx, sy) {
     return {
@@ -143,6 +154,9 @@
     // Width: use direct property (conn.width) if available and valid
     let width = (conn.width !== undefined && conn.width !== null) ? Number(conn.width) : 1.2;
     if (isNaN(width) || width <= 0) width = 1.2;
+    width = Math.max(0.05, roundWidthMeters(width));
+    // Keep state in sync with the rounded width
+    conn.width = width;
     // Fallback to props.width if conn.width failed? No, UI sets conn.width.
 
     const length = conn.distance || 0;
@@ -662,13 +676,13 @@
     const gridSize = GRID_SIZE;
     const scaledGrid = gridSize * cam.zoom;
 
-    if (scaledGrid < 8) return; // too zoomed out
+    if (scaledGrid < 4) return; // too zoomed out
 
     const offsetX = cam.x % scaledGrid;
     const offsetY = cam.y % scaledGrid;
 
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(48,54,61,.6)';
+    ctx.strokeStyle = 'rgba(48,54,61,.35)';
     ctx.lineWidth = 1;
 
     for (let x = offsetX; x < w; x += scaledGrid) {
@@ -683,11 +697,11 @@
 
     // Major gridlines
     const majorGrid = scaledGrid * 5;
-    if (majorGrid >= 40) {
+    if (majorGrid >= 24) {
       const majorOffX = cam.x % majorGrid;
       const majorOffY = cam.y % majorGrid;
       ctx.beginPath();
-      ctx.strokeStyle = 'rgba(48,54,61,1)';
+      ctx.strokeStyle = 'rgba(48,54,61,.75)';
       ctx.lineWidth = 1;
       for (let x = majorOffX; x < w; x += majorGrid) {
         ctx.moveTo(Math.round(x) + 0.5, 0);
@@ -704,7 +718,7 @@
   function drawNode(node) {
     const nt = state.nodeTypes.find(t => t.id === node.typeId) || state.nodeTypes[0];
     const s = worldToScreen(node.x, node.y);
-    const r = NODE_RADIUS * cam.zoom;
+    const r = getNodeRadiusPx();
     const isSelected = selectedItems.has(`node:${node.id}`);
     const isConnectSource = connectSource === node.id;
 
@@ -746,7 +760,8 @@
     // People count inside the node
     const people = node.people || 0;
     if (people > 0) {
-      ctx.font = `600 ${Math.max(10, 12 * cam.zoom)}px Inter, sans-serif`;
+      const peopleFontPx = Math.max(10, Math.min(18, r * 0.8));
+      ctx.font = `600 ${peopleFontPx}px Inter, sans-serif`;
       ctx.fillStyle = var_textPrimary;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -755,16 +770,18 @@
 
     // Label
     const label = node.name || `Node ${node.id}`;
-    ctx.font = `${Math.max(10, 11 * cam.zoom)}px Inter, sans-serif`;
+    const labelFontPx = Math.max(10, Math.min(16, 10 + r * 0.2));
+    ctx.font = `${labelFontPx}px Inter, sans-serif`;
     ctx.fillStyle = var_textPrimary;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillText(label, s.x, s.y + r + 6);
 
     // Type badge
-    ctx.font = `${Math.max(8, 9 * cam.zoom)}px Inter, sans-serif`;
+    const badgeFontPx = Math.max(8, Math.min(13, 8 + r * 0.18));
+    ctx.font = `${badgeFontPx}px Inter, sans-serif`;
     ctx.fillStyle = nt.color;
-    ctx.fillText(nt.name, s.x, s.y + r + 6 + Math.max(12, 14 * cam.zoom));
+    ctx.fillText(nt.name, s.x, s.y + r + 6 + Math.max(12, labelFontPx + 2));
   }
 
   const var_textPrimary = '#e6edf3';
@@ -878,7 +895,7 @@
 
     // Arrows based on direction (adjust size for width)
     const angle = Math.atan2(e.y - s.y, e.x - s.x);
-    const arrowR = NODE_RADIUS * cam.zoom + 4;
+    const arrowR = getNodeRadiusPx() + 4;
     const arrowLen = Math.max(10 * cam.zoom, pixelWidth * 0.8);
 
     function drawArrow(tipX, tipY, ang) {
@@ -1040,11 +1057,12 @@
       targetId: newNode.id,
       typeId: conn.typeId,
       direction: conn.direction,
-      distance: Math.round(dist(src, newNode) / 10) / 10, // /100 for cm->m, then *10/10 for rounding = /10
+      distance: roundDistanceMeters(dist(src, newNode) / PIXELS_PER_METER),
       distanceManual: false,
       speed: conn.speed,
       weight: conn.weight,
       congestion: conn.congestion,
+      width: roundWidthMeters(conn.width || 1.2),
       props: { ...conn.props },
     };
     const conn2 = {
@@ -1053,11 +1071,12 @@
       targetId: conn.targetId,
       typeId: conn.typeId,
       direction: conn.direction,
-      distance: Math.round(dist(newNode, tgt) / 10) / 10, // /100 for cm->m, then *10/10 for rounding = /10
+      distance: roundDistanceMeters(dist(newNode, tgt) / PIXELS_PER_METER),
       distanceManual: false,
       speed: conn.speed,
       weight: conn.weight,
       congestion: conn.congestion,
+      width: roundWidthMeters(conn.width || 1.2),
       props: { ...conn.props },
     };
 
@@ -1118,7 +1137,7 @@
       targetId: tgtId,
       typeId: state.connTypes[0].id,
       direction: 'forward',
-      distance: Math.round((d / 100) * 10) / 10, // d is in cm, convert to m
+      distance: roundDistanceMeters(d / PIXELS_PER_METER),
       distanceManual: false,
       speed: 0,
       weight: 1,
@@ -1154,7 +1173,7 @@
       const tgt = state.nodes.find(n => n.id === c.targetId);
       if (src && tgt) {
         // Distance in meters
-        c.distance = Math.round((dist(src, tgt) / PIXELS_PER_METER) * 10) / 10;
+        c.distance = roundDistanceMeters(dist(src, tgt) / PIXELS_PER_METER);
       }
     });
     recalcFireSafety();
@@ -1605,8 +1624,7 @@
 
             // Convert back to meters
             const widthMeters = totalWidthPx / (PIXELS_PER_METER * cam.zoom);
-            conn.width = Math.round(widthMeters * 10) / 10;
-            if (conn.width < 0.1) conn.width = 0.1;
+            conn.width = Math.max(0.05, roundWidthMeters(widthMeters));
 
             updatePropertiesPanel();
             render();
@@ -1923,7 +1941,7 @@
 
       repCtx.beginPath();
       repCtx.strokeStyle = '#58a6ff';
-      repCtx.lineWidth = Math.max(2, (c.width || 1.2) * 20); // Scale width for visibility
+      repCtx.lineWidth = Math.max(2, (c.width || 1.2) * PIXELS_PER_METER); // Scale width for visibility
       repCtx.moveTo(sx, sy);
       repCtx.lineTo(ex, ey);
       repCtx.stroke();
@@ -2266,10 +2284,12 @@
       // Width
       const commonWidth = getCommonValue(selConns, c => c.width || 1.2);
       section.appendChild(createPropInput('Width (m)', 'number', commonWidth, (val) => {
-        selConns.forEach(c => c.width = parseFloat(val) || 1.2);
+        const widthVal = roundWidthMeters(parseFloat(val) || 1.2);
+        const clamped = Math.max(0.05, widthVal);
+        selConns.forEach(c => c.width = clamped);
         recalcFireSafety();
         render();
-      }));
+      }, false, '0.05'));
 
       // Distance
       const commonDist = getCommonValue(selConns, c => c.distance);
@@ -2281,8 +2301,9 @@
       const distInput = createPropInput('Distance (m)', 'number', commonDist, (val) => {
         const v = parseFloat(val);
         if (!isNaN(v) && v > 0) {
+          const rounded = roundDistanceMeters(v);
           selConns.forEach(c => {
-            c.distance = v;
+            c.distance = rounded;
             c.distanceManual = true;
           });
           recalcFireSafety();
@@ -2298,17 +2319,17 @@
         btnReset.className = 'btn-small';
         btnReset.style.marginTop = '4px';
         btnReset.style.width = '100%';
-        btnReset.onclick = () => {
-          selConns.forEach(c => {
-            c.distanceManual = false;
-            const src = state.nodes.find(n => n.id === c.sourceId);
-            const tgt = state.nodes.find(n => n.id === c.targetId);
-            if (src && tgt) c.distance = Math.round((dist(src, tgt) / PIXELS_PER_METER) * 10) / 10;
-          });
-          recalcFireSafety();
-          updatePropertiesPanel();
-          render();
-        };
+            btnReset.onclick = () => {
+              selConns.forEach(c => {
+                c.distanceManual = false;
+                const src = state.nodes.find(n => n.id === c.sourceId);
+                const tgt = state.nodes.find(n => n.id === c.targetId);
+                if (src && tgt) c.distance = roundDistanceMeters(dist(src, tgt) / PIXELS_PER_METER);
+              });
+              recalcFireSafety();
+              updatePropertiesPanel();
+              render();
+            };
         distInputContainer.appendChild(btnReset);
       }
       section.appendChild(distInputContainer);
@@ -2318,7 +2339,7 @@
   }
 
   // Helper to create inputs
-  function createPropInput(label, type, value, onChange, disabled = false) {
+  function createPropInput(label, type, value, onChange, disabled = false, stepOverride = null) {
     const div = document.createElement('div');
     div.className = 'prop-group' + (value === '<various>' ? ' various' : '');
     const id = `prop-${label.replace(/\s+/g, '-')}-${Math.random().toString(36).substr(2, 5)}`;
@@ -2327,7 +2348,7 @@
     const input = document.createElement('input');
     input.type = type === 'number' ? 'number' : 'text';
     input.id = id;
-    if (type === 'number') input.step = '0.1';
+    if (type === 'number') input.step = stepOverride || '0.1';
 
     if (value === '<various>') {
       input.value = ''; // empty input to show placeholder
