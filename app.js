@@ -13,6 +13,8 @@
     { id: 'stairs_down', name: 'Stairs (Down)', color: '#a371f7', dash: [5, 5] },
   ];
   const ALLOWED_CONN_TYPE_IDS = new Set(DEFAULT_CONN_TYPES.map(t => t.id));
+  const SALAMANDER_VERSION = '1.0.0';
+  const SETTINGS_STORAGE_KEY = 'salamander.settings.v1';
 
   // ─── Data Model ───────────────────────────────────────────
   const state = {
@@ -32,6 +34,21 @@
     regulations: null, // Loaded regulation data
     calculationMethod: 'B', // Default to Method B
     totalEvacuationTime: 0,
+    metadata: {
+      salamanderVersion: SALAMANDER_VERSION,
+      author: '',
+      company: '',
+      project: '',
+      dateTime: '',
+      createdAt: '',
+      exportedAt: '',
+      notes: '',
+    },
+  };
+
+  let appSettings = {
+    defaultAuthor: '',
+    defaultCompany: '',
   };
 
   // Editor State
@@ -73,6 +90,8 @@
   const canvas = document.getElementById('graphCanvas');
   const ctx = canvas.getContext('2d');
   const canvasHint = document.getElementById('canvas-hint');
+  const btnMetadata = document.getElementById('btnMetadata');
+  const btnSettings = document.getElementById('btnSettings');
 
   // Properties Panel Elements
   const propsHeader = document.getElementById('properties-header');
@@ -89,6 +108,24 @@
   const nodesTableBody = document.querySelector('#panel-nodes tbody');
   const connectionsTableBody = document.querySelector('#panel-connections tbody');
   const regulationsContent = document.getElementById('regulations-content');
+
+  const metadataModal = document.getElementById('metadata-modal');
+  const btnCloseMetadata = document.getElementById('btnCloseMetadata');
+  const btnSaveMetadata = document.getElementById('btnSaveMetadata');
+  const metaVersionInput = document.getElementById('metaVersion');
+  const metaAuthorInput = document.getElementById('metaAuthor');
+  const metaCompanyInput = document.getElementById('metaCompany');
+  const metaProjectInput = document.getElementById('metaProject');
+  const metaDateTimeInput = document.getElementById('metaDateTime');
+  const metaCreatedAtInput = document.getElementById('metaCreatedAt');
+  const metaExportedAtInput = document.getElementById('metaExportedAt');
+  const metaNotesInput = document.getElementById('metaNotes');
+
+  const settingsModal = document.getElementById('settings-modal');
+  const btnCloseSettings = document.getElementById('btnCloseSettings');
+  const btnSaveSettings = document.getElementById('btnSaveSettings');
+  const settingsDefaultAuthorInput = document.getElementById('settingsDefaultAuthor');
+  const settingsDefaultCompanyInput = document.getElementById('settingsDefaultCompany');
 
   // Calculation UI
   const methodRadios = document.querySelectorAll('input[name="calcMethod"]');
@@ -185,6 +222,69 @@
     return JSON.parse(JSON.stringify(v));
   }
 
+  function toLocalDateTimeValue(date = new Date()) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function normalizeMetadata(meta = {}) {
+    const now = toLocalDateTimeValue();
+    return {
+      salamanderVersion: String(meta.salamanderVersion || SALAMANDER_VERSION),
+      author: String(meta.author || ''),
+      company: String(meta.company || ''),
+      project: String(meta.project || ''),
+      dateTime: String(meta.dateTime || now),
+      createdAt: String(meta.createdAt || now),
+      exportedAt: String(meta.exportedAt || ''),
+      notes: String(meta.notes || ''),
+    };
+  }
+
+  function applySettingsDefaultsToMetadata() {
+    if (!state.metadata.author && appSettings.defaultAuthor) {
+      state.metadata.author = appSettings.defaultAuthor;
+    }
+    if (!state.metadata.company && appSettings.defaultCompany) {
+      state.metadata.company = appSettings.defaultCompany;
+    }
+    if (!state.metadata.salamanderVersion) {
+      state.metadata.salamanderVersion = SALAMANDER_VERSION;
+    }
+    if (!state.metadata.dateTime) {
+      state.metadata.dateTime = toLocalDateTimeValue();
+    }
+    if (!state.metadata.createdAt) {
+      state.metadata.createdAt = toLocalDateTimeValue();
+    }
+  }
+
+  function loadSettingsFromStorage() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      appSettings.defaultAuthor = String(data.defaultAuthor || '');
+      appSettings.defaultCompany = String(data.defaultCompany || '');
+    } catch (err) {
+      console.warn('Settings load from localStorage failed:', err);
+    }
+  }
+
+  function saveSettingsToStorage() {
+    const payload = {
+      defaultAuthor: appSettings.defaultAuthor || '',
+      defaultCompany: appSettings.defaultCompany || '',
+    };
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+      return true;
+    } catch (err) {
+      console.warn('Settings save to localStorage failed:', err);
+      return false;
+    }
+  }
+
   function normalizeConnectionTypes() {
     const safeConnTypes = Array.isArray(state.connTypes) ? state.connTypes : [];
     state.connTypes = DEFAULT_CONN_TYPES.map((base) => {
@@ -212,6 +312,7 @@
       connections: cloneData(state.connections),
       nodeTypes: cloneData(state.nodeTypes),
       connTypes: cloneData(state.connTypes),
+      metadata: cloneData(state.metadata),
       nextNodeId: state.nextNodeId,
       nextConnId: state.nextConnId,
       calculationMethod: state.calculationMethod,
@@ -226,7 +327,9 @@
     state.connections = cloneData(snap.connections || []);
     state.nodeTypes = cloneData(snap.nodeTypes || state.nodeTypes);
     state.connTypes = cloneData(snap.connTypes || state.connTypes);
+    state.metadata = normalizeMetadata(snap.metadata || state.metadata);
     normalizeConnectionTypes();
+    applySettingsDefaultsToMetadata();
     state.nextNodeId = snap.nextNodeId || 1;
     state.nextConnId = snap.nextConnId || 1;
     state.calculationMethod = snap.calculationMethod || state.calculationMethod;
@@ -803,9 +906,53 @@
     }
 
     drawSelectionBox();
+    drawMetadataOverlay(w, h);
 
     // Update Table
     renderTable();
+  }
+
+  function drawMetadataOverlay(w, h) {
+    const meta = state.metadata || {};
+    const lines = [];
+    lines.push(`Project: ${meta.project || 'Untitled'}`);
+    lines.push(`Author: ${meta.author || '-'}`);
+    lines.push(`Company: ${meta.company || '-'}`);
+    lines.push(`Date: ${meta.dateTime || '-'}`);
+    lines.push(`Created: ${meta.createdAt || '-'}`);
+    lines.push(`Exported: ${meta.exportedAt || '-'}`);
+    lines.push(`Version: ${meta.salamanderVersion || SALAMANDER_VERSION}`);
+    if (meta.notes) {
+      const compact = meta.notes.replace(/\s+/g, ' ').trim();
+      const clipped = compact.length > 90 ? `${compact.slice(0, 87)}...` : compact;
+      lines.push(`Notes: ${clipped}`);
+    }
+
+    ctx.save();
+    ctx.font = '12px Inter, sans-serif';
+    const padding = 10;
+    const lineHeight = 16;
+    const textWidths = lines.map(line => ctx.measureText(line).width);
+    const boxW = Math.max(230, ...textWidths) + padding * 2;
+    const boxH = lines.length * lineHeight + padding * 2;
+    const x = w - boxW - 14;
+    const y = 14;
+
+    ctx.fillStyle = 'rgba(22,27,34,0.92)';
+    ctx.strokeStyle = 'rgba(48,54,61,0.95)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, boxW, boxH, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#e6edf3';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    lines.forEach((line, idx) => {
+      ctx.fillText(line, x + padding, y + padding + idx * lineHeight);
+    });
+    ctx.restore();
   }
 
   function drawSelectionBox() {
@@ -1019,30 +1166,44 @@
     // 2. Zig-Zag Overlay for Congestion
     if (congestion === 'blocked') {
       ctx.save();
-      const zigzagStep = Math.max(15, pixelWidth * 0.8);
-      // Amplitude = half width of normal line below (pixelWidth / 2)
-      const zigzagAmp = pixelWidth / 2;
+      const wx = tgt.x - src.x;
+      const wy = tgt.y - src.y;
+      const wLen = Math.hypot(wx, wy);
 
-      const dx = e.x - s.x;
-      const dy = e.y - s.y;
-      const len = Math.sqrt(dx * dx + dy * dy);
+      if (wLen > 1e-3) {
+        const ux = wx / wLen;
+        const uy = wy / wLen;
+        const nx = -uy;
+        const ny = ux;
 
-      const nx = -dy / len;
-      const ny = dx / len;
+        // Keep zigzag count stable in world space so zoom does not make it flicker.
+        const zigzagStepWorld = 24; // world units (px @ zoom=1)
+        const zigzagCount = Math.max(2, Math.min(260, Math.round(wLen / zigzagStepWorld)));
+        const segWorld = wLen / zigzagCount;
 
-      ctx.beginPath();
-      ctx.strokeStyle = '#f85149'; // Red Overlay
-      ctx.lineWidth = 7; // Fixed width for overlay visibility
+        // Convert desired screen amplitude to world space for smooth zoom behavior.
+        const ampScreen = Math.max(3, Math.min(11, pixelWidth * 0.45));
+        const ampWorld = ampScreen / Math.max(cam.zoom, 0.01);
 
-      ctx.moveTo(s.x, s.y);
-      for (let d = 0; d < len; d += zigzagStep) {
-        const side = (d / zigzagStep) % 2 === 0 ? 1 : -1;
-        const px = s.x + (dx / len) * d + nx * side * zigzagAmp;
-        const py = s.y + (dy / len) * d + ny * side * zigzagAmp;
-        ctx.lineTo(px, py);
+        ctx.beginPath();
+        ctx.strokeStyle = '#f85149';
+        ctx.lineWidth = Math.max(4, Math.min(8, pixelWidth * 0.55));
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = 0.95;
+
+        ctx.moveTo(s.x, s.y);
+        for (let i = 1; i < zigzagCount; i++) {
+          const d = segWorld * i;
+          const side = i % 2 === 0 ? -1 : 1;
+          const wxi = src.x + ux * d + nx * side * ampWorld;
+          const wyi = src.y + uy * d + ny * side * ampWorld;
+          const pi = worldToScreen(wxi, wyi);
+          ctx.lineTo(pi.x, pi.y);
+        }
+        ctx.lineTo(e.x, e.y);
+        ctx.stroke();
       }
-      ctx.lineTo(e.x, e.y);
-      ctx.stroke();
       ctx.restore();
     }
 
@@ -1577,6 +1738,52 @@
     if (!canvasHint) return;
     canvasHint.textContent = text;
     canvasHint.style.display = 'block';
+  }
+
+  function openMetadataModal() {
+    if (!metadataModal) return;
+    state.metadata = normalizeMetadata(state.metadata);
+    if (metaVersionInput) metaVersionInput.value = state.metadata.salamanderVersion || SALAMANDER_VERSION;
+    if (metaAuthorInput) metaAuthorInput.value = state.metadata.author || '';
+    if (metaCompanyInput) metaCompanyInput.value = state.metadata.company || '';
+    if (metaProjectInput) metaProjectInput.value = state.metadata.project || '';
+    if (metaDateTimeInput) metaDateTimeInput.value = state.metadata.dateTime || toLocalDateTimeValue();
+    if (metaCreatedAtInput) metaCreatedAtInput.value = state.metadata.createdAt || toLocalDateTimeValue();
+    if (metaExportedAtInput) metaExportedAtInput.value = state.metadata.exportedAt || '';
+    if (metaNotesInput) metaNotesInput.value = state.metadata.notes || '';
+    metadataModal.style.display = 'flex';
+  }
+
+  function closeMetadataModal() {
+    if (metadataModal) metadataModal.style.display = 'none';
+  }
+
+  function saveMetadataFromModal() {
+    state.metadata = normalizeMetadata({
+      salamanderVersion: metaVersionInput ? metaVersionInput.value : SALAMANDER_VERSION,
+      author: metaAuthorInput ? metaAuthorInput.value : '',
+      company: metaCompanyInput ? metaCompanyInput.value : '',
+      project: metaProjectInput ? metaProjectInput.value : '',
+      dateTime: metaDateTimeInput ? metaDateTimeInput.value : toLocalDateTimeValue(),
+      createdAt: state.metadata.createdAt,
+      exportedAt: state.metadata.exportedAt,
+      notes: metaNotesInput ? metaNotesInput.value : '',
+    });
+    applySettingsDefaultsToMetadata();
+    commitHistory();
+    closeMetadataModal();
+    render();
+  }
+
+  function openSettingsModal() {
+    if (!settingsModal) return;
+    if (settingsDefaultAuthorInput) settingsDefaultAuthorInput.value = appSettings.defaultAuthor || '';
+    if (settingsDefaultCompanyInput) settingsDefaultCompanyInput.value = appSettings.defaultCompany || '';
+    settingsModal.style.display = 'flex';
+  }
+
+  function closeSettingsModal() {
+    if (settingsModal) settingsModal.style.display = 'none';
   }
   function escHtml(s) {
     if (s == null) return '';
@@ -2168,19 +2375,73 @@
     state.connections = [];
     state.nextNodeId = 1;
     state.nextConnId = 1;
+    state.metadata = normalizeMetadata({
+      ...state.metadata,
+      dateTime: toLocalDateTimeValue(),
+      createdAt: toLocalDateTimeValue(),
+      exportedAt: '',
+    });
+    applySettingsDefaultsToMetadata();
     clearSelection();
     commitHistory();
     render();
   });
 
+  if (btnMetadata) {
+    btnMetadata.addEventListener('click', openMetadataModal);
+  }
+  if (btnCloseMetadata) {
+    btnCloseMetadata.addEventListener('click', closeMetadataModal);
+  }
+  if (btnSaveMetadata) {
+    btnSaveMetadata.addEventListener('click', saveMetadataFromModal);
+  }
+  if (metadataModal) {
+    metadataModal.addEventListener('click', (e) => {
+      if (e.target === metadataModal) closeMetadataModal();
+    });
+  }
+
+  if (btnSettings) {
+    btnSettings.addEventListener('click', openSettingsModal);
+  }
+  if (btnCloseSettings) {
+    btnCloseSettings.addEventListener('click', closeSettingsModal);
+  }
+  if (btnSaveSettings) {
+    btnSaveSettings.addEventListener('click', () => {
+      appSettings.defaultAuthor = settingsDefaultAuthorInput ? settingsDefaultAuthorInput.value.trim() : '';
+      appSettings.defaultCompany = settingsDefaultCompanyInput ? settingsDefaultCompanyInput.value.trim() : '';
+      const saved = saveSettingsToStorage();
+      if (saved) {
+        applySettingsDefaultsToMetadata();
+        commitHistory();
+        closeSettingsModal();
+        render();
+      } else {
+        alert('Failed to save settings in this browser.');
+      }
+    });
+  }
+  if (settingsModal) {
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) closeSettingsModal();
+    });
+  }
+
   const btnExport = document.getElementById('btnExport');
   if (btnExport) {
     btnExport.addEventListener('click', () => {
+      state.metadata = normalizeMetadata({
+        ...state.metadata,
+        exportedAt: toLocalDateTimeValue(),
+      });
       const data = {
         nodes: state.nodes,
         connections: state.connections,
         nodeTypes: state.nodeTypes,
         connTypes: state.connTypes,
+        metadata: state.metadata,
       };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -2189,6 +2450,7 @@
       a.download = 'graph.json';
       a.click();
       URL.revokeObjectURL(url);
+      render();
     });
   }
 
@@ -2213,7 +2475,9 @@
           if (data.connections) state.connections = data.connections;
           if (data.nodeTypes) state.nodeTypes = data.nodeTypes;
           if (data.connTypes) state.connTypes = data.connTypes;
+          state.metadata = normalizeMetadata(data.metadata || state.metadata);
           normalizeConnectionTypes();
+          applySettingsDefaultsToMetadata();
           state.nextNodeId = Math.max(0, ...state.nodes.map(n => n.id)) + 1;
           state.nextConnId = Math.max(0, ...state.connections.map(c => c.id)) + 1;
           recalcPeopleCounts();
@@ -2245,6 +2509,9 @@
       })
       .catch(err => console.error('Failed to load regulations:', err));
 
+    loadSettingsFromStorage();
+    state.metadata = normalizeMetadata(state.metadata);
+    applySettingsDefaultsToMetadata();
     normalizeConnectionTypes();
 
     // Center camera
@@ -2261,9 +2528,13 @@
 
   // Wait for fonts
   if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(init);
+    document.fonts.ready.then(() => {
+      init();
+    });
   } else {
-    window.addEventListener('load', init);
+    window.addEventListener('load', () => {
+      init();
+    });
   }
 
   // Convert HSL colors to hex for type manager (when creating via random hue)

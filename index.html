@@ -99,6 +99,21 @@
         </svg>
         Report
       </button>
+      <button class="action-btn" id="btnMetadata" title="Edit Graph Metadata">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 7h18" />
+          <path d="M3 12h18" />
+          <path d="M3 17h12" />
+        </svg>
+        Metadata
+      </button>
+      <button class="action-btn" id="btnSettings" title="App Settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+        Settings
+      </button>
       </button>
       <input type="file" id="importFile" accept=".json" style="display:none">
     </div>
@@ -310,6 +325,58 @@
           <h3>3. Detailed Math Proof</h3>
           <div id="mathProofContent" class="math-content"></div>
         </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="metadata-modal" class="modal-overlay" style="display:none">
+    <div class="modal-container modal-compact">
+      <div class="modal-header">
+        <h2>Graph Metadata</h2>
+        <button id="btnCloseMetadata" class="icon-btn" title="Close">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-content modal-form">
+        <div class="form-grid">
+          <label>Salamander Version<input id="metaVersion" type="text"></label>
+          <label>Author<input id="metaAuthor" type="text"></label>
+          <label>Company<input id="metaCompany" type="text"></label>
+          <label>Project<input id="metaProject" type="text"></label>
+          <label>Date & Time<input id="metaDateTime" type="datetime-local"></label>
+          <label>Created (auto)<input id="metaCreatedAt" type="datetime-local" readonly></label>
+          <label>Exported (auto)<input id="metaExportedAt" type="datetime-local" readonly></label>
+          <label class="span-2">Notes<textarea id="metaNotes" rows="4"></textarea></label>
+        </div>
+        <div class="modal-actions">
+          <button id="btnSaveMetadata" class="action-btn">Save Metadata</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="settings-modal" class="modal-overlay" style="display:none">
+    <div class="modal-container modal-compact">
+      <div class="modal-header">
+        <h2>Settings</h2>
+        <button id="btnCloseSettings" class="icon-btn" title="Close">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-content modal-form">
+        <div class="form-grid">
+          <label>Default Author<input id="settingsDefaultAuthor" type="text"></label>
+          <label>Default Company<input id="settingsDefaultCompany" type="text"></label>
+        </div>
+        <div class="modal-actions">
+          <button id="btnSaveSettings" class="action-btn">Save Settings</button>
+        </div>
       </div>
     </div>
   </div>
