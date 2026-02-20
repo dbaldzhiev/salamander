@@ -6,6 +6,7 @@ A premium, dark-themed interactive node graph editor built with vanilla HTML5 Ca
 
 - **Interactive Graph**: Create nodes, connect them, and drag them around.
 - **Grid Snapping**: Nodes automatically snap to a 40px grid for clean layouts.
+- **Pinning**: Pin nodes so the Order Graph solver keeps them fixed.
 - **Node Types**:
   - **Start** (Green): User-definable people count.
   - **Secondary Start** (Teal): User-definable people count.
@@ -19,7 +20,9 @@ A premium, dark-themed interactive node graph editor built with vanilla HTML5 Ca
 - **Advanced Connection Properties**:
   - **Direction**: Forward (→), Backward (←), or Bidirectional (↔).
   - **Congestion**: Visualize traffic jams with color coding (Green → Yellow → Orange → Red → Blocked).
-  - **Distance**: Auto-calculated Euclidean distance, or manually overrideable.
+  - **Desired Length**: Optional target length used by Order Graph.
+  - **Distance**: Always matches geometric length; editing it moves graph geometry to enforce the new value.
+- **Order Graph**: Toggle continuous orthogonal ordering so connections trend toward rectilinear 90° layouts.
 - **Flow Calculation**: Automatically propagates "People Count" from Start nodes through the network based on connection direction.
 - **T/X Intersections**: Click on any connection to split it and create a new node at that point.
 

@@ -69,6 +69,9 @@
   let historyIndex = -1;
   let lastHistorySignature = '';
   let applyingHistory = false;
+  let orderGraphEnabled = false;
+  let orderGraphRafId = null;
+  let orderGraphDirty = false;
 
   // Constants
   const PIXELS_PER_METER = 30; // 1m = 30px, tuned for 20-30m schematics
@@ -92,6 +95,8 @@
   const canvasHint = document.getElementById('canvas-hint');
   const btnMetadata = document.getElementById('btnMetadata');
   const btnSettings = document.getElementById('btnSettings');
+  const btnOrderGraph = document.getElementById('btnOrderGraph');
+  if (btnOrderGraph) btnOrderGraph.setAttribute('aria-pressed', 'false');
 
   // Properties Panel Elements
   const propsHeader = document.getElementById('properties-header');
@@ -150,6 +155,7 @@
   const dist = (a, b) => Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
   const lerp = (a, b, t) => a + (b - a) * t;
   const uid = () => Math.random().toString(36).slice(2, 9);
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
   const roundDistanceMeters = (m) => Math.round(m * 10) / 10; // 0.1m precision
   const roundWidthMeters = (m) => Math.round(m * 20) / 20; // 0.05m precision
 
@@ -1123,6 +1129,24 @@
     ctx.font = `${badgeFontPx}px Inter, sans-serif`;
     ctx.fillStyle = nt.color;
     ctx.fillText(nt.name, s.x, s.y + r + 6 + Math.max(12, labelFontPx + 2));
+
+    if (node.pinned) {
+      const px = s.x + r * 0.62;
+      const py = s.y - r * 0.7;
+      ctx.save();
+      ctx.fillStyle = '#e3b341';
+      ctx.strokeStyle = '#161b22';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(px, py, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(px, py + 2.5);
+      ctx.lineTo(px, py + 8);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   const var_textPrimary = '#e6edf3';
@@ -1473,19 +1497,26 @@
       x: sx,
       y: sy,
       width: nodeTypeId === 'door' ? 1.2 : undefined,
+      pinned: false,
       props: {},
     };
     state.nodes.push(newNode);
 
     // Create two new connections replacing the old one
+    const dSrcMid = dist(src, newNode);
+    const dMidTgt = dist(newNode, tgt);
+    const dFull = Math.max(1e-6, dist(src, tgt));
+    const parentDesired = Number.isFinite(Number(conn.desiredDistance)) && Number(conn.desiredDistance) > 0
+      ? Number(conn.desiredDistance)
+      : null;
+
     const conn1 = {
       id: state.nextConnId++,
       sourceId: conn.sourceId,
       targetId: newNode.id,
       typeId: conn.typeId,
       direction: conn.direction,
-      distance: roundDistanceMeters(dist(src, newNode) / PIXELS_PER_METER),
-      distanceManual: false,
+      distance: roundDistanceMeters(dSrcMid / PIXELS_PER_METER),
       speed: conn.speed,
       weight: conn.weight,
       congestion: conn.congestion,
@@ -1498,14 +1529,17 @@
       targetId: conn.targetId,
       typeId: conn.typeId,
       direction: conn.direction,
-      distance: roundDistanceMeters(dist(newNode, tgt) / PIXELS_PER_METER),
-      distanceManual: false,
+      distance: roundDistanceMeters(dMidTgt / PIXELS_PER_METER),
       speed: conn.speed,
       weight: conn.weight,
       congestion: conn.congestion,
       width: roundWidthMeters(conn.width || 1.2),
       props: { ...conn.props },
     };
+    if (parentDesired !== null) {
+      conn1.desiredDistance = roundDistanceMeters(parentDesired * (dSrcMid / dFull));
+      conn2.desiredDistance = roundDistanceMeters(parentDesired * (dMidTgt / dFull));
+    }
 
     // Remove old connection, add new ones
     state.connections = state.connections.filter(c => c.id !== conn.id);
@@ -1544,6 +1578,7 @@
       x: snapToGrid(wx),
       y: snapToGrid(wy),
       width: typeId === 'door' ? 1.2 : undefined,
+      pinned: false,
       people: people,
       props: {},
     };
@@ -1573,7 +1608,6 @@
       typeId: state.connTypes[0].id,
       direction: 'forward',
       distance: roundDistanceMeters(d / PIXELS_PER_METER),
-      distanceManual: false,
       speed: 0,
       weight: 1,
       congestion: 'none',
@@ -1608,6 +1642,8 @@
 
     const n1 = c1.sourceId === nodeId ? c1.targetId : c1.sourceId;
     const n2 = c2.sourceId === nodeId ? c2.targetId : c2.sourceId;
+    const n1Node = state.nodes.find(n => n.id === n1);
+    const n2Node = state.nodes.find(n => n.id === n2);
     if (n1 === n2) return null;
     if (state.connections.some(c =>
       (c.sourceId === n1 && c.targetId === n2) ||
@@ -1625,20 +1661,25 @@
     if (!can12 && can21) direction = 'backward';
     if (!can12 && !can21) return null;
 
-    return {
+    const mergedConn = {
       id: state.nextConnId++,
       sourceId: n1,
       targetId: n2,
       typeId: c1.typeId,
       direction,
-      distance: roundDistanceMeters((c1.distance || 0) + (c2.distance || 0)),
-      distanceManual: !!(c1.distanceManual || c2.distanceManual),
+      distance: n1Node && n2Node ? roundDistanceMeters(dist(n1Node, n2Node) / PIXELS_PER_METER) : roundDistanceMeters((c1.distance || 0) + (c2.distance || 0)),
       speed: (c1.speed || c2.speed || 0),
       weight: Math.max(c1.weight || 1, c2.weight || 1),
       congestion: c1.congestion === c2.congestion ? c1.congestion : 'none',
       width: roundWidthMeters(((c1.width || 1.2) + (c2.width || 1.2)) / 2),
       props: { ...c1.props, ...c2.props },
     };
+    const c1Desired = Number.isFinite(Number(c1.desiredDistance)) && Number(c1.desiredDistance) > 0 ? Number(c1.desiredDistance) : null;
+    const c2Desired = Number.isFinite(Number(c2.desiredDistance)) && Number(c2.desiredDistance) > 0 ? Number(c2.desiredDistance) : null;
+    if (c1Desired !== null || c2Desired !== null) {
+      mergedConn.desiredDistance = roundDistanceMeters((c1Desired !== null ? c1Desired : (c1.distance || 0)) + (c2Desired !== null ? c2Desired : (c2.distance || 0)));
+    }
+    return mergedConn;
   }
 
   function deleteNode(nodeId, options = {}) {
@@ -1671,7 +1712,6 @@
 
   function updateConnectionDistances() {
     state.connections.forEach(c => {
-      if (c.distanceManual) return; // Skip if manually set
       const src = state.nodes.find(n => n.id === c.sourceId);
       const tgt = state.nodes.find(n => n.id === c.targetId);
       if (src && tgt) {
@@ -1680,6 +1720,202 @@
       }
     });
     recalcFireSafety();
+  }
+
+  function getConnectionDesiredDistance(conn) {
+    const desired = Number(conn.desiredDistance);
+    if (Number.isFinite(desired) && desired > 0) {
+      return roundDistanceMeters(desired);
+    }
+    const fallback = Number(conn.distance);
+    if (Number.isFinite(fallback) && fallback > 0) {
+      return roundDistanceMeters(fallback);
+    }
+    return GRID_SIZE_METERS;
+  }
+
+  function getNodeDegree(nodeId) {
+    let degree = 0;
+    for (const c of state.connections) {
+      if (c.sourceId === nodeId || c.targetId === nodeId) degree++;
+    }
+    return degree;
+  }
+
+  function forceConnectionDistanceGeometry(conn, desiredMeters) {
+    const src = state.nodes.find(n => n.id === conn.sourceId);
+    const tgt = state.nodes.find(n => n.id === conn.targetId);
+    if (!src || !tgt) return false;
+
+    const targetMeters = Math.max(GRID_SIZE_METERS, roundDistanceMeters(desiredMeters));
+    const targetPx = targetMeters * PIXELS_PER_METER;
+    const srcDegree = getNodeDegree(src.id);
+    const tgtDegree = getNodeDegree(tgt.id);
+    const srcPinned = !!src.pinned;
+    const tgtPinned = !!tgt.pinned;
+
+    let anchor = src;
+    let moving = tgt;
+    if (srcPinned && !tgtPinned) {
+      anchor = src;
+      moving = tgt;
+    } else if (tgtPinned && !srcPinned) {
+      anchor = tgt;
+      moving = src;
+    } else if (tgtDegree > srcDegree) {
+      anchor = tgt;
+      moving = src;
+    }
+
+    let vx = moving.x - anchor.x;
+    let vy = moving.y - anchor.y;
+    let len = Math.hypot(vx, vy);
+
+    if (len < 1e-6) {
+      vx = 1;
+      vy = 0;
+      len = 1;
+    }
+
+    const ux = vx / len;
+    const uy = vy / len;
+    moving.x = snapToGrid(anchor.x + ux * targetPx);
+    moving.y = snapToGrid(anchor.y + uy * targetPx);
+    conn.distance = targetMeters;
+    return true;
+  }
+
+  function orderGraphStep() {
+    if (state.connections.length === 0 || state.nodes.length < 2) return false;
+    if (isPanning || dragging || selectionBox) return false;
+
+    const deltas = new Map();
+    const nodeById = new Map(state.nodes.map(n => [n.id, n]));
+    const ensureDelta = (id) => {
+      if (!deltas.has(id)) deltas.set(id, { x: 0, y: 0, count: 0 });
+      return deltas.get(id);
+    };
+    const gain = 0.28;
+    const maxMove = GRID_SIZE * 1.5;
+    const snapBlend = 0.2;
+
+    for (const c of state.connections) {
+      const src = nodeById.get(c.sourceId);
+      const tgt = nodeById.get(c.targetId);
+      if (!src || !tgt) continue;
+      const srcPinned = !!src.pinned;
+      const tgtPinned = !!tgt.pinned;
+      if (srcPinned && tgtPinned) continue;
+
+      const dx = tgt.x - src.x;
+      const dy = tgt.y - src.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 1e-6) continue;
+
+      const targetLen = Math.max(GRID_SIZE, getConnectionDesiredDistance(c) * PIXELS_PER_METER);
+      const horizontal = Math.abs(dx) >= Math.abs(dy);
+
+      let desiredDx = 0;
+      let desiredDy = 0;
+      if (horizontal) {
+        desiredDx = (dx >= 0 ? 1 : -1) * targetLen;
+      } else {
+        desiredDy = (dy >= 0 ? 1 : -1) * targetLen;
+      }
+
+      const errX = desiredDx - dx;
+      const errY = desiredDy - dy;
+      if (Math.abs(errX) < 1e-4 && Math.abs(errY) < 1e-4) continue;
+
+      const corrX = errX * gain;
+      const corrY = errY * gain;
+      if (srcPinned) {
+        const tgtDelta = ensureDelta(tgt.id);
+        tgtDelta.x += corrX;
+        tgtDelta.y += corrY;
+        tgtDelta.count += 1;
+      } else if (tgtPinned) {
+        const srcDelta = ensureDelta(src.id);
+        srcDelta.x -= corrX;
+        srcDelta.y -= corrY;
+        srcDelta.count += 1;
+      } else {
+        const moveX = corrX * 0.5;
+        const moveY = corrY * 0.5;
+        const srcDelta = ensureDelta(src.id);
+        srcDelta.x -= moveX;
+        srcDelta.y -= moveY;
+        srcDelta.count += 1;
+
+        const tgtDelta = ensureDelta(tgt.id);
+        tgtDelta.x += moveX;
+        tgtDelta.y += moveY;
+        tgtDelta.count += 1;
+      }
+    }
+
+    let changed = false;
+    deltas.forEach((d, nodeId) => {
+      const node = nodeById.get(nodeId);
+      if (!node || d.count === 0 || node.pinned) return;
+      const moveX = clamp(d.x / d.count, -maxMove, maxMove);
+      const moveY = clamp(d.y / d.count, -maxMove, maxMove);
+      if (Math.abs(moveX) < 1e-4 && Math.abs(moveY) < 1e-4) return;
+
+      const rawX = node.x + moveX;
+      const rawY = node.y + moveY;
+      const nextX = lerp(rawX, snapToGrid(rawX), snapBlend);
+      const nextY = lerp(rawY, snapToGrid(rawY), snapBlend);
+      if (Math.abs(nextX - node.x) > 1e-4 || Math.abs(nextY - node.y) > 1e-4) {
+        node.x = nextX;
+        node.y = nextY;
+        changed = true;
+      }
+    });
+
+    return changed;
+  }
+
+  function orderGraphTick() {
+    if (!orderGraphEnabled) {
+      orderGraphRafId = null;
+      return;
+    }
+
+    if (orderGraphStep()) {
+      orderGraphDirty = true;
+      updateConnectionDistances();
+      render();
+    }
+
+    orderGraphRafId = requestAnimationFrame(orderGraphTick);
+  }
+
+  function setOrderGraphEnabled(enabled) {
+    orderGraphEnabled = !!enabled;
+    if (btnOrderGraph) {
+      btnOrderGraph.classList.toggle('active', orderGraphEnabled);
+      btnOrderGraph.setAttribute('aria-pressed', orderGraphEnabled ? 'true' : 'false');
+    }
+
+    if (orderGraphEnabled) {
+      if (!orderGraphRafId) {
+        orderGraphRafId = requestAnimationFrame(orderGraphTick);
+      }
+      return;
+    }
+
+    if (orderGraphRafId) {
+      cancelAnimationFrame(orderGraphRafId);
+      orderGraphRafId = null;
+    }
+
+    if (orderGraphDirty) {
+      updateConnectionDistances();
+      commitHistory();
+      orderGraphDirty = false;
+      render();
+    }
   }
 
   // ─── People Count Calculation ─────────────────────────────
@@ -2387,6 +2623,12 @@
     render();
   });
 
+  if (btnOrderGraph) {
+    btnOrderGraph.addEventListener('click', () => {
+      setOrderGraphEnabled(!orderGraphEnabled);
+    });
+  }
+
   if (btnMetadata) {
     btnMetadata.addEventListener('click', openMetadataModal);
   }
@@ -2471,8 +2713,22 @@
       reader.onload = (ev) => {
         try {
           const data = JSON.parse(ev.target.result);
-          if (data.nodes) state.nodes = data.nodes;
-          if (data.connections) state.connections = data.connections;
+          if (data.nodes) {
+            state.nodes = data.nodes.map((n) => ({ ...n, pinned: !!n.pinned }));
+          }
+          if (data.connections) {
+            state.connections = data.connections.map((c) => {
+              const next = { ...c };
+              delete next.distanceManual;
+              const desired = Number(next.desiredDistance);
+              if (Number.isFinite(desired) && desired > 0) {
+                next.desiredDistance = roundDistanceMeters(desired);
+              } else {
+                delete next.desiredDistance;
+              }
+              return next;
+            });
+          }
           if (data.nodeTypes) state.nodeTypes = data.nodeTypes;
           if (data.connTypes) state.connTypes = data.connTypes;
           state.metadata = normalizeMetadata(data.metadata || state.metadata);
@@ -2480,6 +2736,7 @@
           applySettingsDefaultsToMetadata();
           state.nextNodeId = Math.max(0, ...state.nodes.map(n => n.id)) + 1;
           state.nextConnId = Math.max(0, ...state.connections.map(c => c.id)) + 1;
+          updateConnectionDistances();
           recalcPeopleCounts();
           clearSelection();
           renderLegend();
@@ -2979,6 +3236,18 @@
         render();
       }));
 
+      const commonPinned = getCommonValue(selNodes, n => !!n.pinned);
+      const pinnedValue = commonPinned === '<various>' ? '<various>' : String(commonPinned);
+      section.appendChild(createPropSelect('Pinned (Order Graph)', [
+        { id: 'false', name: 'No' },
+        { id: 'true', name: 'Yes' },
+      ], pinnedValue, (val) => {
+        const isPinned = val === 'true';
+        selNodes.forEach(n => n.pinned = isPinned);
+        commitHistory();
+        render();
+      }));
+
       // People (Source nodes only)
       const sourceNodes = selNodes.filter(n => ['start', 'start2'].includes(n.typeId));
       if (sourceNodes.length > 0) {
@@ -3031,50 +3300,61 @@
         render();
       }, false, '0.05'));
 
+      const commonDesired = getCommonValue(selConns, (c) => {
+        const desired = Number(c.desiredDistance);
+        return Number.isFinite(desired) && desired > 0 ? roundDistanceMeters(desired) : null;
+      });
+      const desiredInput = createPropInput('Desired Length (m)', 'number',
+        commonDesired === null ? '' : commonDesired, (val) => {
+          const v = parseFloat(val);
+          if (!isNaN(v) && v > 0) {
+            const desired = Math.max(GRID_SIZE_METERS, roundDistanceMeters(v));
+            selConns.forEach(c => c.desiredDistance = desired);
+            commitHistory();
+            updatePropertiesPanel();
+            render();
+          }
+        }, false, '0.1');
+      if (commonDesired === null) {
+        const input = desiredInput.querySelector('input');
+        if (input) input.placeholder = 'auto';
+      }
+      section.appendChild(desiredInput);
+
+      const clearDesiredBtn = document.createElement('button');
+      clearDesiredBtn.textContent = 'Use Actual Length';
+      clearDesiredBtn.className = 'action-btn-small';
+      clearDesiredBtn.style.marginTop = '4px';
+      clearDesiredBtn.style.width = '100%';
+      clearDesiredBtn.style.padding = '6px 8px';
+      clearDesiredBtn.style.justifyContent = 'center';
+      clearDesiredBtn.onclick = () => {
+        selConns.forEach(c => {
+          delete c.desiredDistance;
+        });
+        commitHistory();
+        updatePropertiesPanel();
+        render();
+      };
+      section.appendChild(clearDesiredBtn);
+
       // Distance
       const commonDist = getCommonValue(selConns, c => c.distance);
-      const anyManual = selConns.some(c => c.distanceManual);
-
-      const distInputContainer = document.createElement('div');
-      distInputContainer.className = 'prop-group';
-
-      const distInput = createPropInput('Distance (m)', 'number', commonDist, (val) => {
+      section.appendChild(createPropInput('Distance (m)', 'number', commonDist, (val) => {
         const v = parseFloat(val);
         if (!isNaN(v) && v > 0) {
-          const rounded = roundDistanceMeters(v);
+          const desired = Math.max(GRID_SIZE_METERS, roundDistanceMeters(v));
+          let changed = false;
           selConns.forEach(c => {
-            c.distance = rounded;
-            c.distanceManual = true;
+            changed = forceConnectionDistanceGeometry(c, desired) || changed;
           });
-          recalcFireSafety();
+          if (!changed) return;
+          updateConnectionDistances();
           commitHistory();
-          render();
           updatePropertiesPanel();
+          render();
         }
-      });
-      distInputContainer.appendChild(distInput);
-
-      if (anyManual) {
-        const btnReset = document.createElement('button');
-        btnReset.textContent = 'Reset to Auto';
-        btnReset.className = 'btn-small';
-        btnReset.style.marginTop = '4px';
-        btnReset.style.width = '100%';
-            btnReset.onclick = () => {
-              selConns.forEach(c => {
-                c.distanceManual = false;
-                const src = state.nodes.find(n => n.id === c.sourceId);
-                const tgt = state.nodes.find(n => n.id === c.targetId);
-                if (src && tgt) c.distance = roundDistanceMeters(dist(src, tgt) / PIXELS_PER_METER);
-              });
-              recalcFireSafety();
-              commitHistory();
-              updatePropertiesPanel();
-              render();
-            };
-        distInputContainer.appendChild(btnReset);
-      }
-      section.appendChild(distInputContainer);
+      }, false, '0.1'));
 
       propsContent.appendChild(section);
     }

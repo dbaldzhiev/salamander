@@ -143,6 +143,13 @@ body {
   border-color: var(--border-secondary);
 }
 
+.action-btn.active {
+  background: rgba(88, 166, 255, 0.14);
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+  box-shadow: var(--shadow-glow);
+}
+
 .toolbar-info {
   padding-left: 8px;
   color: var(--text-muted);
