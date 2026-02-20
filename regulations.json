@@ -34,27 +34,6 @@
             "v_gran": 9.24
         }
     },
-    "permissible_time_limits": {
-        "description": "Base permissible evacuation times (t_perm) in minutes based on Article 60 and 61[cite: 130, 146].",
-        "buildings_under_25m": {
-            "fire_resistance_I_II": 6.0,
-            "fire_resistance_III": 3.0,
-            "fire_resistance_IV_V": 1.0
-        },
-        "buildings_over_25m": {
-            "to_staircase_entry": 1.5
-        },
-        "assembly_halls_over_100_people": {
-            "fire_resistance_I_II": 2.0,
-            "fire_resistance_III": 1.0,
-            "fire_resistance_IV_V": 1.0,
-            "voice_alarm_system_multiplier": 1.5
-        },
-        "production_shelves": {
-            "cat_F5A_F5B": 0.5,
-            "cat_F5V": 1.0
-        }
-    },
     "table_11_flow_params": {
         "description": "Speed (v) [m/min] and Specific Throughput (q) [pers/m.min] based on Density (D) [pers/m2]. Used for interpolating flow (Annex 8a, Table 11).",
         "columns": [
