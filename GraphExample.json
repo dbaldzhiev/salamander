@@ -4,261 +4,276 @@
       "id": 1,
       "name": "",
       "typeId": "start",
-      "x": -2000,
-      "y": -600,
+      "x": -1809,
+      "y": -258,
       "people": 8,
       "props": {},
-      "maxTime": 0
+      "maxTime": 0,
+      "pinned": true
     },
     {
       "id": 2,
       "name": "",
       "typeId": "exit",
-      "x": 1100,
-      "y": -100,
+      "x": -933,
+      "y": -102,
       "people": 75,
       "props": {},
-      "maxTime": 2.803930409337664
+      "maxTime": 2.9691441731299992,
+      "pinned": false
     },
     {
       "id": 3,
       "name": "",
       "typeId": "waypoint",
-      "x": -2000,
-      "y": -100,
+      "x": -1809,
+      "y": -102,
       "props": {},
       "people": 11,
-      "maxTime": 0.07553534760926958
+      "maxTime": 0.12042612320518759,
+      "pinned": true
     },
     {
       "id": 4,
       "name": "",
       "typeId": "start2",
-      "x": -2000,
-      "y": 300,
+      "x": -1809,
+      "y": -45,
       "people": 3,
       "props": {},
-      "maxTime": 0
+      "maxTime": 0,
+      "pinned": true
     },
     {
       "id": 5,
       "name": "",
       "typeId": "start2",
-      "x": -1700,
-      "y": -500,
+      "x": -1742.8685905322398,
+      "y": -240.06248850193293,
       "people": 6,
       "props": {},
-      "maxTime": 0
+      "maxTime": 0,
+      "pinned": true
     },
     {
       "id": 6,
       "name": "",
       "typeId": "start2",
-      "x": -1700,
-      "y": 300,
+      "x": -1743,
+      "y": -48,
       "people": 2,
       "props": {},
-      "maxTime": 0
+      "maxTime": 0,
+      "pinned": true
     },
     {
       "id": 7,
       "name": "",
       "typeId": "waypoint",
-      "x": -1700,
-      "y": -100,
+      "x": -1742.7509284546802,
+      "y": -102.11843977459498,
       "props": {},
       "people": 19,
-      "maxTime": 0.1434365821771708
-    },
-    {
-      "id": 8,
-      "name": "",
-      "typeId": "start2",
-      "x": -1400,
-      "y": -500,
-      "people": 6,
-      "props": {},
-      "maxTime": 0
+      "maxTime": 0.14822847376755333,
+      "pinned": true
     },
     {
       "id": 9,
       "name": "",
       "typeId": "start2",
-      "x": -1400,
-      "y": -500,
+      "x": -1677,
+      "y": -240,
       "people": 6,
       "props": {},
-      "maxTime": 0
+      "maxTime": 0,
+      "pinned": true
     },
     {
       "id": 10,
       "name": "",
       "typeId": "start2",
-      "x": -1400,
-      "y": 300,
+      "x": -1677,
+      "y": -48,
       "people": 2,
       "props": {},
-      "maxTime": 0
+      "maxTime": 0,
+      "pinned": true
     },
     {
       "id": 11,
       "name": "",
       "typeId": "waypoint",
-      "x": -1400,
-      "y": -100,
+      "x": -1677,
+      "y": -102,
       "props": {},
       "people": 27,
-      "maxTime": 0.26072053279445473
+      "maxTime": 0.29738101614043466,
+      "pinned": true
     },
     {
       "id": 12,
       "name": "",
       "typeId": "start2",
-      "x": -1100,
-      "y": -500,
+      "x": -1611,
+      "y": -240,
       "people": 6,
       "props": {},
-      "maxTime": 0
+      "maxTime": 0,
+      "pinned": true
     },
     {
       "id": 13,
       "name": "",
       "typeId": "start2",
-      "x": -1100,
-      "y": 300,
+      "x": -1611,
+      "y": -48,
       "people": 2,
       "props": {},
-      "maxTime": 0
+      "maxTime": 0,
+      "pinned": true
     },
     {
       "id": 14,
       "name": "",
       "typeId": "waypoint",
-      "x": -1100,
-      "y": -100,
+      "x": -1611,
+      "y": -102,
       "props": {},
       "people": 35,
-      "maxTime": 0.42738719946112136
+      "maxTime": 0.6322364194889887,
+      "pinned": true
     },
     {
       "id": 15,
       "name": "",
       "typeId": "start2",
-      "x": -800,
-      "y": -500,
+      "x": -1544.885768051941,
+      "y": -239.8444386629224,
       "people": 6,
       "props": {},
-      "maxTime": 0
+      "maxTime": 0,
+      "pinned": true
     },
     {
       "id": 19,
       "name": "",
       "typeId": "waypoint",
-      "x": -800,
-      "y": -100,
+      "x": -1544.7834864693323,
+      "y": -101.70515136178275,
       "props": {},
       "people": 41,
-      "maxTime": 0.6434365821771707
+      "maxTime": 0.9670918228375427,
+      "pinned": true
     },
     {
       "id": 20,
       "name": "",
       "typeId": "start2",
-      "x": -500,
-      "y": -600,
+      "x": -1479,
+      "y": -261,
       "people": 7,
       "props": {},
-      "maxTime": 0
+      "maxTime": 0,
+      "pinned": true
     },
     {
       "id": 21,
       "name": "",
       "typeId": "waypoint",
-      "x": -500,
-      "y": -100,
+      "x": -1479,
+      "y": -102,
       "props": {},
       "people": 48,
-      "maxTime": 0.8965230019302571
+      "maxTime": 1.3019472261860967,
+      "pinned": true
     },
     {
       "id": 23,
       "name": "",
       "typeId": "start2",
-      "x": -200,
-      "y": -600,
+      "x": -1413,
+      "y": -261,
       "people": 7,
       "props": {},
-      "maxTime": 0
+      "maxTime": 0,
+      "pinned": true
     },
     {
       "id": 24,
       "name": "",
       "typeId": "waypoint",
-      "x": -200,
-      "y": -100,
+      "x": -1413,
+      "y": -102,
       "props": {},
       "people": 55,
-      "maxTime": 1.1928192982265533
+      "maxTime": 1.6368026295346507,
+      "pinned": true
     },
     {
       "id": 25,
       "name": "",
       "typeId": "start2",
-      "x": 100,
-      "y": -600,
+      "x": -1347,
+      "y": -261,
       "people": 7,
       "props": {},
-      "maxTime": 0
+      "maxTime": 0,
+      "pinned": true
     },
     {
       "id": 26,
       "name": "",
       "typeId": "waypoint",
-      "x": 100,
-      "y": -100,
+      "x": -1347,
+      "y": -102,
       "props": {},
       "people": 62,
-      "maxTime": 1.5323254710660594
+      "maxTime": 1.9729815428019335,
+      "pinned": true
     },
     {
       "id": 27,
       "name": "",
       "typeId": "start2",
-      "x": 400,
-      "y": -600,
+      "x": -1281,
+      "y": -261,
       "people": 7,
       "props": {},
-      "maxTime": 0
+      "maxTime": 0,
+      "pinned": true
     },
     {
       "id": 28,
       "name": "",
       "typeId": "waypoint",
-      "x": 400,
-      "y": -100,
+      "x": -1281,
+      "y": -102,
       "props": {},
       "people": 69,
-      "maxTime": 1.9150415204487754
+      "maxTime": 2.3214570664050425,
+      "pinned": true
     },
     {
       "id": 29,
       "name": "",
       "typeId": "start2",
-      "x": 700,
-      "y": -600,
+      "x": -1215,
+      "y": -261,
       "people": 6,
       "props": {},
-      "maxTime": 0
+      "maxTime": 0,
+      "pinned": true
     },
     {
       "id": 30,
       "name": "",
       "typeId": "waypoint",
-      "x": 700,
-      "y": -100,
+      "x": -1215,
+      "y": -102,
       "props": {},
       "people": 75,
-      "maxTime": 2.340967446374701
+      "maxTime": 2.6563124697535967,
+      "pinned": true
     }
   ],
   "connections": [
@@ -268,28 +283,28 @@
       "targetId": 3,
       "typeId": "normal",
       "direction": "forward",
-      "distance": 5.15,
-      "distanceManual": true,
+      "distance": 5.2,
       "speed": 0,
       "weight": 1,
       "congestion": "none",
       "props": {},
-      "travelTime": 0.07553534760926958,
+      "travelTime": 0.12042612320518759,
       "calcStats": {
         "density": 0,
-        "v": 68.18,
-        "q": 102.3,
-        "Q": 122.75999999999999,
-        "time": 0.07553534760926958,
+        "v": 43.18,
+        "q": 151.1,
+        "Q": 67.995,
+        "time": 0.12042612320518759,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
       "width": 0.45,
       "flowState": {
-        "Q_in": 122.75999999999999,
-        "q_spec": 102.3,
-        "Q_out": 122.75999999999999,
+        "Q_in": 67.995,
+        "q_spec": 151.1,
+        "Q_out": 67.995,
         "hasQueue": false
       }
     },
@@ -300,27 +315,27 @@
       "typeId": "normal",
       "direction": "forward",
       "distance": 1.9,
-      "distanceManual": true,
       "speed": 0,
       "weight": 1,
       "congestion": "none",
       "props": {},
-      "travelTime": 0.027867409797594597,
+      "travelTime": 0.048419979612640156,
       "calcStats": {
         "density": 0,
-        "v": 68.18,
-        "q": 102.3,
-        "Q": 122.75999999999999,
-        "time": 0.027867409797594597,
+        "v": 39.24,
+        "q": 157,
+        "Q": 70.65,
+        "time": 0.048419979612640156,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
       "width": 0.45,
       "flowState": {
-        "Q_in": 122.75999999999999,
-        "q_spec": 102.3,
-        "Q_out": 122.75999999999999,
+        "Q_in": 70.65,
+        "q_spec": 157,
+        "Q_out": 70.65,
         "hasQueue": false
       }
     },
@@ -330,29 +345,37 @@
       "targetId": 7,
       "typeId": "stairs_down",
       "direction": "forward",
-      "distance": 2.15,
-      "distanceManual": true,
+      "distance": 2.2,
       "speed": 0,
       "weight": 1,
-      "congestion": "blocked",
+      "congestion": "none",
       "props": {},
-      "travelTime": 0.06790123456790123,
+      "travelTime": 0.02780235056236573,
       "calcStats": {
         "density": 0,
-        "v": 0,
-        "q": 204.6,
-        "Q": 245.51999999999998,
-        "time": 0.06790123456790123,
+        "v": 79.13,
+        "q": 115.53750000000001,
+        "Q": 138.645,
+        "time": 0.02780235056236573,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
-      "width": 1.3,
+      "width": 1.2,
       "flowState": {
-        "Q_in": 245.51999999999998,
-        "q_spec": 204.6,
-        "Q_out": 162,
-        "hasQueue": true
+        "Q_in": 138.645,
+        "q_spec": 115.53750000000001,
+        "Q_out": 138.645,
+        "hasQueue": false
+      },
+      "dynamicStats": {
+        "N_total": 11,
+        "t_filling": 0.0625355315520182,
+        "N_out": 10.13075611142695,
+        "N_eff": 0.8692438885730507,
+        "v_density": 35.18,
+        "density": 4.166666666666666
       }
     },
     {
@@ -362,27 +385,27 @@
       "typeId": "normal",
       "direction": "forward",
       "distance": 1.8,
-      "distanceManual": true,
       "speed": 0,
       "weight": 1,
       "congestion": "none",
       "props": {},
-      "travelTime": 0.02246069378587472,
+      "travelTime": 0.03389192242515534,
       "calcStats": {
         "density": 0,
-        "v": 80.14,
-        "q": 80.1,
-        "Q": 96.11999999999999,
-        "time": 0.02246069378587472,
+        "v": 53.11,
+        "q": 132.8,
+        "Q": 59.760000000000005,
+        "time": 0.03389192242515534,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
       "width": 0.45,
       "flowState": {
-        "Q_in": 96.11999999999999,
-        "q_spec": 80.1,
-        "Q_out": 96.11999999999999,
+        "Q_in": 59.760000000000005,
+        "q_spec": 132.8,
+        "Q_out": 59.760000000000005,
         "hasQueue": false
       }
     },
@@ -393,29 +416,30 @@
       "typeId": "normal",
       "direction": "forward",
       "distance": 4.6,
-      "distanceManual": true,
       "speed": 0,
       "weight": 1,
       "congestion": "none",
       "props": {},
-      "travelTime": 0.06746846582575534,
+      "travelTime": 0.09637544521265451,
       "calcStats": {
         "density": 0,
-        "v": 68.18,
-        "q": 102.3,
-        "Q": 122.75999999999999,
-        "time": 0.06746846582575534,
+        "v": 47.73,
+        "q": 143.2,
+        "Q": 64.44,
+        "time": 0.09637544521265451,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
       "width": 0.45,
       "flowState": {
-        "Q_in": 122.75999999999999,
-        "q_spec": 102.3,
-        "Q_out": 122.75999999999999,
+        "Q_in": 64.44,
+        "q_spec": 143.2,
+        "Q_out": 64.44,
         "hasQueue": false
-      }
+      },
+      "desiredDistance": 4.6
     },
     {
       "id": 9,
@@ -423,30 +447,38 @@
       "targetId": 11,
       "typeId": "stairs_down",
       "direction": "forward",
-      "distance": 2.15,
-      "distanceManual": true,
+      "distance": 2.2,
       "speed": 0,
       "weight": 1,
       "congestion": "blocked",
       "props": {},
-      "travelTime": 0.11728395061728394,
+      "travelTime": 0.14915254237288136,
       "calcStats": {
         "density": 0,
         "v": 0,
-        "q": 317.40000000000003,
-        "Q": 380.88,
-        "time": 0.11728395061728394,
+        "q": 219.03750000000002,
+        "Q": 262.845,
+        "time": 0.14915254237288136,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
       "flowState": {
-        "Q_in": 380.88,
-        "q_spec": 317.40000000000003,
+        "Q_in": 262.845,
+        "q_spec": 219.03750000000002,
         "Q_out": 162,
         "hasQueue": true
       },
-      "width": 1.3
+      "width": 1.2,
+      "dynamicStats": {
+        "N_total": 19,
+        "t_filling": 0.14915254237288136,
+        "N_out": 24.16271186440678,
+        "N_eff": 0,
+        "v_density": 14.75,
+        "density": 7.196969696969696
+      }
     },
     {
       "id": 11,
@@ -455,29 +487,30 @@
       "typeId": "normal",
       "direction": "forward",
       "distance": 4.6,
-      "distanceManual": true,
       "speed": 0,
       "weight": 1,
       "congestion": "none",
       "props": {},
-      "travelTime": 0.06746846582575534,
+      "travelTime": 0.09637544521265451,
       "calcStats": {
         "density": 0,
-        "v": 68.18,
-        "q": 102.3,
-        "Q": 122.75999999999999,
-        "time": 0.06746846582575534,
+        "v": 47.73,
+        "q": 143.2,
+        "Q": 64.44,
+        "time": 0.09637544521265451,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
       "width": 0.45,
       "flowState": {
-        "Q_in": 122.75999999999999,
-        "q_spec": 102.3,
-        "Q_out": 122.75999999999999,
+        "Q_in": 64.44,
+        "q_spec": 143.2,
+        "Q_out": 64.44,
         "hasQueue": false
-      }
+      },
+      "desiredDistance": 4.6
     },
     {
       "id": 12,
@@ -486,27 +519,27 @@
       "typeId": "normal",
       "direction": "forward",
       "distance": 1.8,
-      "distanceManual": true,
       "speed": 0,
       "weight": 1,
       "congestion": "none",
       "props": {},
-      "travelTime": 0.02246069378587472,
+      "travelTime": 0.03389192242515534,
       "calcStats": {
         "density": 0,
-        "v": 80.14,
-        "q": 80.1,
-        "Q": 96.11999999999999,
-        "time": 0.02246069378587472,
+        "v": 53.11,
+        "q": 132.8,
+        "Q": 59.760000000000005,
+        "time": 0.03389192242515534,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
       "width": 0.45,
       "flowState": {
-        "Q_in": 96.11999999999999,
-        "q_spec": 80.1,
-        "Q_out": 96.11999999999999,
+        "Q_in": 59.760000000000005,
+        "q_spec": 132.8,
+        "Q_out": 59.760000000000005,
         "hasQueue": false
       }
     },
@@ -516,28 +549,37 @@
       "targetId": 14,
       "typeId": "stairs_down",
       "direction": "forward",
-      "distance": 2.15,
-      "distanceManual": true,
+      "distance": 2.2,
       "speed": 0,
       "weight": 1,
       "congestion": "blocked",
       "props": {},
-      "travelTime": 0.16666666666666666,
+      "travelTime": 0.33485540334855407,
       "flowState": {
-        "Q_in": 380.88,
-        "q_spec": 317.40000000000003,
+        "Q_in": 286.2,
+        "q_spec": 238.5,
         "Q_out": 162,
         "hasQueue": true
       },
       "calcStats": {
         "density": 0,
         "v": 0,
-        "q": 317.40000000000003,
-        "Q": 380.88,
-        "time": 0.16666666666666666,
+        "q": 238.5,
+        "Q": 286.2,
+        "time": 0.33485540334855407,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
+      },
+      "width": 1.2,
+      "dynamicStats": {
+        "N_total": 27,
+        "t_filling": 0.33485540334855407,
+        "N_out": 54.24657534246576,
+        "N_eff": 0,
+        "v_density": 6.57,
+        "density": 10.227272727272727
       }
     },
     {
@@ -547,29 +589,30 @@
       "typeId": "normal",
       "direction": "forward",
       "distance": 4.6,
-      "distanceManual": true,
       "speed": 0,
       "weight": 1,
       "congestion": "none",
       "props": {},
-      "travelTime": 0.06746846582575534,
+      "travelTime": 0.09637544521265451,
       "flowState": {
-        "Q_in": 122.75999999999999,
-        "q_spec": 102.3,
-        "Q_out": 122.75999999999999,
+        "Q_in": 64.44,
+        "q_spec": 143.2,
+        "Q_out": 64.44,
         "hasQueue": false
       },
       "calcStats": {
         "density": 0,
-        "v": 68.18,
-        "q": 102.3,
-        "Q": 122.75999999999999,
-        "time": 0.06746846582575534,
+        "v": 47.73,
+        "q": 143.2,
+        "Q": 64.44,
+        "time": 0.09637544521265451,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
-      "width": 0.45
+      "width": 0.45,
+      "desiredDistance": 4.6
     },
     {
       "id": 16,
@@ -578,27 +621,27 @@
       "typeId": "normal",
       "direction": "forward",
       "distance": 1.8,
-      "distanceManual": true,
       "speed": 0,
       "weight": 1,
       "congestion": "none",
       "props": {},
-      "travelTime": 0.02246069378587472,
+      "travelTime": 0.03389192242515534,
       "flowState": {
-        "Q_in": 96.11999999999999,
-        "q_spec": 80.1,
-        "Q_out": 96.11999999999999,
+        "Q_in": 59.760000000000005,
+        "q_spec": 132.8,
+        "Q_out": 59.760000000000005,
         "hasQueue": false
       },
       "calcStats": {
         "density": 0,
-        "v": 80.14,
-        "q": 80.1,
-        "Q": 96.11999999999999,
-        "time": 0.02246069378587472,
+        "v": 53.11,
+        "q": 132.8,
+        "Q": 59.760000000000005,
+        "time": 0.03389192242515534,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
       "width": 0.45
     },
@@ -608,30 +651,38 @@
       "targetId": 19,
       "typeId": "stairs_down",
       "direction": "forward",
-      "distance": 2.15,
-      "distanceManual": true,
+      "distance": 2.2,
       "speed": 0,
       "weight": 1,
       "congestion": "blocked",
       "props": {},
-      "travelTime": 0.21604938271604937,
+      "travelTime": 0.33485540334855407,
       "flowState": {
-        "Q_in": 380.88,
-        "q_spec": 317.40000000000003,
+        "Q_in": 286.2,
+        "q_spec": 238.5,
         "Q_out": 162,
         "hasQueue": true
       },
       "calcStats": {
         "density": 0,
         "v": 0,
-        "q": 317.40000000000003,
-        "Q": 380.88,
-        "time": 0.21604938271604937,
+        "q": 238.5,
+        "Q": 286.2,
+        "time": 0.33485540334855407,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
-      "width": 1.3
+      "width": 1.2,
+      "dynamicStats": {
+        "N_total": 35,
+        "t_filling": 0.33485540334855407,
+        "N_out": 54.24657534246576,
+        "N_eff": 0,
+        "v_density": 6.57,
+        "density": 13.257575757575758
+      }
     },
     {
       "id": 26,
@@ -640,29 +691,30 @@
       "typeId": "normal",
       "direction": "forward",
       "distance": 4.6,
-      "distanceManual": true,
       "speed": 0,
       "weight": 1,
       "congestion": "none",
       "props": {},
-      "travelTime": 0.06746846582575534,
+      "travelTime": 0.09637544521265451,
       "flowState": {
-        "Q_in": 122.75999999999999,
-        "q_spec": 102.3,
-        "Q_out": 122.75999999999999,
+        "Q_in": 64.44,
+        "q_spec": 143.2,
+        "Q_out": 64.44,
         "hasQueue": false
       },
       "calcStats": {
         "density": 0,
-        "v": 68.18,
-        "q": 102.3,
-        "Q": 122.75999999999999,
-        "time": 0.06746846582575534,
+        "v": 47.73,
+        "q": 143.2,
+        "Q": 64.44,
+        "time": 0.09637544521265451,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
-      "width": 0.45
+      "width": 0.45,
+      "desiredDistance": 4.6
     },
     {
       "id": 27,
@@ -670,28 +722,37 @@
       "targetId": 21,
       "typeId": "stairs_down",
       "direction": "forward",
-      "distance": 2.15,
-      "distanceManual": true,
+      "distance": 2.2,
       "speed": 0,
       "weight": 1,
       "congestion": "blocked",
       "props": {},
-      "travelTime": 0.25308641975308643,
+      "travelTime": 0.33485540334855407,
       "flowState": {
-        "Q_in": 284.76,
-        "q_spec": 237.3,
+        "Q_in": 226.44,
+        "q_spec": 188.70000000000002,
         "Q_out": 162,
         "hasQueue": true
       },
       "calcStats": {
         "density": 0,
         "v": 0,
-        "q": 237.3,
-        "Q": 284.76,
-        "time": 0.25308641975308643,
+        "q": 188.70000000000002,
+        "Q": 226.44,
+        "time": 0.33485540334855407,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
+      },
+      "width": 1.2,
+      "dynamicStats": {
+        "N_total": 41,
+        "t_filling": 0.33485540334855407,
+        "N_out": 54.24657534246576,
+        "N_eff": 0,
+        "v_density": 6.57,
+        "density": 15.53030303030303
       }
     },
     {
@@ -701,29 +762,30 @@
       "typeId": "normal",
       "direction": "forward",
       "distance": 5.3,
-      "distanceManual": true,
       "speed": 0,
       "weight": 1,
       "congestion": "none",
       "props": {},
-      "travelTime": 0.07773540627750072,
+      "travelTime": 0.11104127383197152,
       "flowState": {
-        "Q_in": 122.75999999999999,
-        "q_spec": 102.3,
-        "Q_out": 122.75999999999999,
+        "Q_in": 64.44,
+        "q_spec": 143.2,
+        "Q_out": 64.44,
         "hasQueue": false
       },
       "calcStats": {
         "density": 0,
-        "v": 68.18,
-        "q": 102.3,
-        "Q": 122.75999999999999,
-        "time": 0.07773540627750072,
+        "v": 47.73,
+        "q": 143.2,
+        "Q": 64.44,
+        "time": 0.11104127383197152,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
-      "width": 0.45
+      "width": 0.45,
+      "desiredDistance": 5.3
     },
     {
       "id": 35,
@@ -732,29 +794,30 @@
       "typeId": "normal",
       "direction": "forward",
       "distance": 5.3,
-      "distanceManual": true,
       "speed": 0,
       "weight": 1,
       "congestion": "none",
       "props": {},
-      "travelTime": 0.07773540627750072,
+      "travelTime": 0.11104127383197152,
       "flowState": {
-        "Q_in": 122.75999999999999,
-        "q_spec": 102.3,
-        "Q_out": 122.75999999999999,
+        "Q_in": 64.44,
+        "q_spec": 143.2,
+        "Q_out": 64.44,
         "hasQueue": false
       },
       "calcStats": {
         "density": 0,
-        "v": 68.18,
-        "q": 102.3,
-        "Q": 122.75999999999999,
-        "time": 0.07773540627750072,
+        "v": 47.73,
+        "q": 143.2,
+        "Q": 64.44,
+        "time": 0.11104127383197152,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
-      "width": 0.45
+      "width": 0.45,
+      "desiredDistance": 5.3
     },
     {
       "id": 36,
@@ -762,28 +825,37 @@
       "targetId": 24,
       "typeId": "stairs_down",
       "direction": "forward",
-      "distance": 2.15,
-      "distanceManual": true,
+      "distance": 2.2,
       "speed": 0,
       "weight": 1,
       "congestion": "blocked",
       "props": {},
-      "travelTime": 0.2962962962962963,
+      "travelTime": 0.33485540334855407,
       "flowState": {
-        "Q_in": 284.76,
-        "q_spec": 237.3,
+        "Q_in": 226.44,
+        "q_spec": 188.70000000000002,
         "Q_out": 162,
         "hasQueue": true
       },
       "calcStats": {
         "density": 0,
         "v": 0,
-        "q": 237.3,
-        "Q": 284.76,
-        "time": 0.2962962962962963,
+        "q": 188.70000000000002,
+        "Q": 226.44,
+        "time": 0.33485540334855407,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
+      },
+      "width": 1.2,
+      "dynamicStats": {
+        "N_total": 48,
+        "t_filling": 0.33485540334855407,
+        "N_out": 54.24657534246576,
+        "N_eff": 0,
+        "v_density": 6.57,
+        "density": 18.18181818181818
       }
     },
     {
@@ -792,28 +864,37 @@
       "targetId": 26,
       "typeId": "stairs_down",
       "direction": "forward",
-      "distance": 2.15,
-      "distanceManual": true,
+      "distance": 2.2,
       "speed": 0,
       "weight": 1,
       "congestion": "blocked",
       "props": {},
-      "travelTime": 0.3395061728395062,
+      "travelTime": 0.3361789132672829,
       "flowState": {
-        "Q_in": 284.76,
-        "q_spec": 237.3,
+        "Q_in": 226.44,
+        "q_spec": 188.70000000000002,
         "Q_out": 162,
         "hasQueue": true
       },
       "calcStats": {
         "density": 0,
         "v": 0,
-        "q": 237.3,
-        "Q": 284.76,
-        "time": 0.3395061728395062,
+        "q": 188.70000000000002,
+        "Q": 226.44,
+        "time": 0.3361789132672829,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
+      },
+      "width": 1.2,
+      "dynamicStats": {
+        "N_total": 55,
+        "t_filling": 0.33485540334855407,
+        "N_out": 54.24657534246576,
+        "N_eff": 0.7534246575342394,
+        "v_density": 6.57,
+        "density": 20.833333333333332
       }
     },
     {
@@ -823,29 +904,30 @@
       "typeId": "normal",
       "direction": "forward",
       "distance": 5.3,
-      "distanceManual": true,
       "speed": 0,
       "weight": 1,
       "congestion": "none",
       "props": {},
-      "travelTime": 0.07773540627750072,
+      "travelTime": 0.11104127383197152,
       "flowState": {
-        "Q_in": 122.75999999999999,
-        "q_spec": 102.3,
-        "Q_out": 122.75999999999999,
+        "Q_in": 64.44,
+        "q_spec": 143.2,
+        "Q_out": 64.44,
         "hasQueue": false
       },
       "calcStats": {
         "density": 0,
-        "v": 68.18,
-        "q": 102.3,
-        "Q": 122.75999999999999,
-        "time": 0.07773540627750072,
+        "v": 47.73,
+        "q": 143.2,
+        "Q": 64.44,
+        "time": 0.11104127383197152,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
-      "width": 0.45
+      "width": 0.45,
+      "desiredDistance": 5.3
     },
     {
       "id": 40,
@@ -853,28 +935,37 @@
       "targetId": 28,
       "typeId": "stairs_down",
       "direction": "forward",
-      "distance": 3,
-      "distanceManual": false,
+      "distance": 2.2,
       "speed": 0,
       "weight": 1,
       "congestion": "blocked",
       "props": {},
-      "travelTime": 0.38271604938271603,
+      "travelTime": 0.3484755236031089,
       "flowState": {
-        "Q_in": 284.76,
-        "q_spec": 237.3,
+        "Q_in": 226.44,
+        "q_spec": 188.70000000000002,
         "Q_out": 162,
         "hasQueue": true
       },
       "calcStats": {
         "density": 0,
         "v": 0,
-        "q": 237.3,
-        "Q": 284.76,
-        "time": 0.38271604938271603,
+        "q": 188.70000000000002,
+        "Q": 226.44,
+        "time": 0.3484755236031089,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
+      },
+      "width": 1.2,
+      "dynamicStats": {
+        "N_total": 62,
+        "t_filling": 0.33485540334855407,
+        "N_out": 54.24657534246576,
+        "N_eff": 7.753424657534239,
+        "v_density": 6.57,
+        "density": 23.484848484848484
       }
     },
     {
@@ -883,30 +974,31 @@
       "targetId": 28,
       "typeId": "normal",
       "direction": "forward",
-      "distance": 5,
-      "distanceManual": false,
+      "distance": 5.3,
       "speed": 0,
       "weight": 1,
       "congestion": "none",
       "props": {},
-      "travelTime": 0.07333528894103843,
+      "travelTime": 0.11104127383197152,
       "flowState": {
-        "Q_in": 122.75999999999999,
-        "q_spec": 102.3,
-        "Q_out": 122.75999999999999,
+        "Q_in": 64.44,
+        "q_spec": 143.2,
+        "Q_out": 64.44,
         "hasQueue": false
       },
       "calcStats": {
         "density": 0,
-        "v": 68.18,
-        "q": 102.3,
-        "Q": 122.75999999999999,
-        "time": 0.07333528894103843,
+        "v": 47.73,
+        "q": 143.2,
+        "Q": 64.44,
+        "time": 0.11104127383197152,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
-      "width": 0.45
+      "width": 0.45,
+      "desiredDistance": 5.3
     },
     {
       "id": 43,
@@ -914,30 +1006,38 @@
       "targetId": 30,
       "typeId": "stairs_down",
       "direction": "forward",
-      "distance": 2,
-      "distanceManual": true,
+      "distance": 2.2,
       "speed": 0,
       "weight": 1,
       "congestion": "blocked",
       "props": {},
-      "travelTime": 0.42592592592592593,
+      "travelTime": 0.33485540334855407,
       "flowState": {
-        "Q_in": 284.76,
-        "q_spec": 237.3,
-        "Q_out": 162,
+        "Q_in": 320.79,
+        "q_spec": 188.70000000000002,
+        "Q_out": 229.5,
         "hasQueue": true
       },
       "calcStats": {
         "density": 0,
         "v": 0,
-        "q": 237.3,
-        "Q": 284.76,
-        "time": 0.42592592592592593,
+        "q": 188.70000000000002,
+        "Q": 320.79,
+        "time": 0.33485540334855407,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
-      "width": 1.7
+      "width": 1.7,
+      "dynamicStats": {
+        "N_total": 69,
+        "t_filling": 0.33485540334855407,
+        "N_out": 76.84931506849315,
+        "N_eff": 0,
+        "v_density": 6.57,
+        "density": 18.449197860962567
+      }
     },
     {
       "id": 44,
@@ -945,30 +1045,38 @@
       "targetId": 2,
       "typeId": "normal",
       "direction": "forward",
-      "distance": 9.35,
-      "distanceManual": true,
+      "distance": 9.4,
       "speed": 0,
       "weight": 1,
       "congestion": "blocked",
       "props": {},
-      "travelTime": 0.46296296296296297,
+      "travelTime": 0.3128317033764025,
       "flowState": {
-        "Q_in": 258.12,
-        "q_spec": 215.10000000000002,
-        "Q_out": 162,
+        "Q_in": 456.225,
+        "q_spec": 276.50000000000006,
+        "Q_out": 222.75,
         "hasQueue": true
       },
       "calcStats": {
         "density": 0,
         "v": 0,
-        "q": 215.10000000000002,
-        "Q": 258.12,
-        "time": 0.46296296296296297,
+        "q": 276.50000000000006,
+        "Q": 456.225,
+        "time": 0.3128317033764025,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
-      "width": 1.65
+      "width": 1.65,
+      "dynamicStats": {
+        "N_total": 75,
+        "t_filling": 0.28781383955909373,
+        "N_out": 64.11053276178814,
+        "N_eff": 10.889467238211864,
+        "v_density": 32.66,
+        "density": 4.835589941972921
+      }
     },
     {
       "id": 45,
@@ -976,30 +1084,31 @@
       "targetId": 30,
       "typeId": "normal",
       "direction": "forward",
-      "distance": 5.7,
-      "distanceManual": true,
+      "distance": 5.3,
       "speed": 0,
       "weight": 1,
       "congestion": "none",
       "props": {},
-      "travelTime": 0.07112553032193661,
+      "travelTime": 0.07773540627750072,
       "flowState": {
-        "Q_in": 96.11999999999999,
-        "q_spec": 80.1,
-        "Q_out": 96.11999999999999,
+        "Q_in": 102.3,
+        "q_spec": 102.3,
+        "Q_out": 102.3,
         "hasQueue": false
       },
       "calcStats": {
         "density": 0,
-        "v": 80.14,
-        "q": 80.1,
-        "Q": 96.11999999999999,
-        "time": 0.07112553032193661,
+        "v": 68.18,
+        "q": 102.3,
+        "Q": 102.3,
+        "time": 0.07773540627750072,
         "method": "B",
         "q_max": 164.2,
-        "q_gran": 135
+        "q_gran": 135,
+        "v_gran": 14.67
       },
-      "width": 1
+      "width": 1,
+      "desiredDistance": 5.3
     }
   ],
   "nodeTypes": [
@@ -1054,5 +1163,15 @@
         4
       ]
     }
-  ]
+  ],
+  "metadata": {
+    "salamanderVersion": "1.0.0",
+    "author": "Dimtiar",
+    "company": "Tectonica",
+    "project": "",
+    "dateTime": "2026-02-20T17:34",
+    "createdAt": "2026-02-20T17:34",
+    "exportedAt": "2026-02-20T20:57",
+    "notes": ""
+  }
 }
