@@ -1,4 +1,11 @@
-const fs = require('fs');
+let fs = null;
+if (typeof require === 'function') {
+    try {
+        fs = require('fs');
+    } catch (err) {
+        fs = null;
+    }
+}
 
 class SalamanderCore {
     constructor(regulations) {
@@ -29,6 +36,8 @@ class SalamanderCore {
         // Prioritize conn.width, fallback to 1.2
         let width = (conn.width !== undefined && conn.width !== null) ? Number(conn.width) : 1.2;
         if (isNaN(width) || width <= 0) width = 1.2;
+        width = Math.max(0.05, Math.round(width * 20) / 20);
+        conn.width = width;
 
         const length = conn.distance || 0;
         const src = this.state.nodes.find(n => n.id === conn.sourceId);
@@ -167,6 +176,7 @@ class SalamanderCore {
             c.congestion = 'none';
             c.travelTime = 0;
             c.flowState = { Q_in: 0, q_spec: 0, Q_out: 0, hasQueue: false };
+            c.dynamicStats = null;
         });
 
         const sortedConns = this.sortConnectionsTopologically();
@@ -179,10 +189,20 @@ class SalamanderCore {
             let q_curr = 0, Q_curr = 0, v_curr = 0;
             const incomingConns = this.state.connections.filter(c => c.targetId === conn.sourceId);
             const isInitial = incomingConns.length === 0 || ['start', 'start2'].includes(src.typeId);
+            const outConns = this.state.connections.filter(c => c.sourceId === conn.sourceId);
+            const totalOutWidth = outConns.reduce((sum, c) => {
+                const rawWidth = (c.width !== undefined && c.width !== null)
+                    ? c.width
+                    : (c.props && c.props.width);
+                const parsed = parseFloat(rawWidth);
+                return sum + (Number.isFinite(parsed) ? parsed : 1.2);
+            }, 0);
+            const splitRatio = totalOutWidth > 0 ? (p.width / totalOutWidth) : 1;
+            const N_stream_max = Math.max(0, (Number(src.people) || 0) * splitRatio);
 
             if (isInitial) {
                 const area = p.length * p.width;
-                const density = area > 0 ? (src.people || 0) / area : 0;
+                const density = area > 0 ? N_stream_max / area : 0;
                 const table = this.lookupTable11(p.type, density);
                 v_curr = table.v;
                 q_curr = table.q;
@@ -193,10 +213,7 @@ class SalamanderCore {
                 incomingConns.forEach(inc => {
                     Q_total_in += (inc.flowState ? inc.flowState.Q_out : 0);
                 });
-                const outConns = this.state.connections.filter(c => c.sourceId === conn.sourceId);
-                const totalOutWidth = outConns.reduce((sum, c) => sum + (parseFloat(c.width || c.props.width) || 1.2), 0);
-                const ratio = totalOutWidth > 0 ? (p.width / totalOutWidth) : 1;
-                Q_curr = Q_total_in * ratio;
+                Q_curr = Q_total_in * splitRatio;
                 q_curr = p.width > 0 ? Q_curr / p.width : 0;
             }
 
@@ -209,35 +226,21 @@ class SalamanderCore {
                 hasQueue = true;
                 conn.congestion = 'blocked';
 
-                const N_total = p.people || 0;
+                const N_total = N_stream_max;
                 const Q_out = p.width * limits.q_gran;
                 const Q_in = Q_curr;
 
                 // Norm 2 Clause I.11 Dynamic Reduction
-                // Instead of v_free (100 m/min), we use the actual speed based on density (D = N/A).
-                // This gives a more realistic "Time to Cross" for the population.
+                // Remove the portion that can discharge before full occupation.
 
                 const area = p.length * p.width;
                 const density = area > 0 ? (p.people || 0) / area : 0;
                 const table = this.lookupTable11(p.type, density);
-                const v_density = table.v > 0 ? table.v : 100; // Fallback to 100 if v=0 (jammed? no, v=0 at high D)
-
-                let t_filling = 0;
-                if (p.type.includes('door') && p.length <= 0.7) {
-                    t_filling = 0;
-                } else {
-                    // If v is very low, t becomes huge, N_out becomes huge -> N_eff -> 0.
-                    // Is this correct? Yes, if they move slowly, they take longer to reach the queue,
-                    // so more people exit before the "end" of the group hits the queue?
-                    // Actually, the bottleneck is at the front.
-                    // The "time to fill" logic implies the time until the back of the queue reaches the start?
-                    // Let's stick to "Time to Cross" for the group.
-                    t_filling = (p.length / v_density);
-                }
-
-                const N_out = Q_out * t_filling;
+                const v_density = table.v > 0.1 ? table.v : 100;
+                const t_filling = v_density > 0.1 ? (p.length / v_density) : 0;
+                const N_out_raw = Q_out * t_filling;
+                const N_out = Math.max(0, Math.min(N_total, N_out_raw));
                 const N_eff = Math.max(0, N_total - N_out);
-                conn.dynamicStats = { N_total, t_filling, N_out, N_eff, v_density, density };
 
                 let travelTerm = 0;
                 if (p.type.includes('door') && p.length <= 0.7) {
@@ -247,12 +250,35 @@ class SalamanderCore {
                 }
 
                 let delayTerm = 0;
+                let delayKernel = 0;
                 if (Q_out > 0.1 && Q_in > 0.1) {
                     const val = (1 / Q_out) - (1 / Q_in);
-                    delayTerm = N_eff * Math.max(0, val);
+                    delayKernel = Math.max(0, val);
+                    delayTerm = N_eff * delayKernel;
                 } else if (Q_out > 0.1) {
+                    delayKernel = 1 / Q_out;
                     delayTerm = N_eff / Q_out;
                 }
+
+                conn.dynamicStats = {
+                    N_total,
+                    N_stream_max,
+                    splitRatio,
+                    t_filling,
+                    N_out,
+                    N_eff,
+                    v_density,
+                    density,
+                    segmentArea: area,
+                    Q_in,
+                    Q_out,
+                    q_max: q_max,
+                    q_gran: limits.q_gran,
+                    v_gran: limits.v_gran,
+                    delayKernel,
+                    travelTerm,
+                    delayTerm
+                };
 
                 conn.travelTime = travelTerm + delayTerm;
                 final_Q_out = Q_out;
@@ -357,21 +383,34 @@ class SalamanderCore {
                     const ds = c.dynamicStats || { N_total: 0, t_free: 0, N_out: 0, N_eff: 0 };
                     const Q_out = width * stats.q_gran;
                     const Q_in = fs.Q_in || 0;
+                    const area = Math.max(0, (c.distance || 0) * width);
+                    const nTotal = Number.isFinite(Number(ds.N_total)) ? Number(ds.N_total) : 0;
+                    const vDensity = Number.isFinite(Number(ds.v_density)) ? Number(ds.v_density) : 0;
+                    const tFill = Number.isFinite(Number(ds.t_filling)) ? Number(ds.t_filling) : 0;
+                    const nOut = Number.isFinite(Number(ds.N_out)) ? Number(ds.N_out) : 0;
+                    const nEff = Number.isFinite(Number(ds.N_eff)) ? Number(ds.N_eff) : 0;
+                    const density = Number.isFinite(Number(ds.density)) ? Number(ds.density) : (area > 0 ? (nTotal / area) : 0);
+                    const delayKernel = Number.isFinite(Number(ds.delayKernel)) ? Number(ds.delayKernel) : Math.max(0, (1 / Q_out) - (1 / Q_in));
 
                     text += `     - Methodology: "Time for Queued Flow" (Norm 2, Formula 2)\n`;
-                    text += `     - Clause I.11 Application (Dynamic Reduction):\n`;
-                    text += `       * Total People (N_total) = ${ds.N_total}\n`;
-                    text += `       * Density Based Speed (v_d) = ${ds.v_density.toFixed(2)} m/min (at D=${ds.density.toFixed(2)})\n`;
-                    text += `       * Time to Cross / Fill (t_fill) = ℓ / v_d = ${ds.t_filling.toFixed(4)} min\n`;
-                    text += `       * Escaped People (N_out) = Q_gran * t_fill = ${Q_out.toFixed(2)} * ${ds.t_filling.toFixed(4)} = ${ds.N_out.toFixed(2)}\n`;
-                    text += `       * Effective People (N_eff) = max(0, N_total - N_out) = ${ds.N_eff.toFixed(2)}\n`;
+                    text += `     - Annex 8a III.5(b): q > q_max => boundary-flow regime (v_gran, q_gran)\n`;
+                    text += `     - Clause I.11 Application (N_eff derivation):\n`;
+                    text += `       * Maximum people in section (N_i,max) = ${nTotal}\n`;
+                    text += `       * Segment Area (A = ℓ*δ) = ${area.toFixed(4)} m2\n`;
+                    text += `       * Density (D_ai = N_i,max/A) = ${density.toFixed(4)} p/m2\n`;
+                    text += `       * Density Based Speed (v_d from Table 11) = ${vDensity.toFixed(2)} m/min\n`;
+                    text += `       * Time to Cross / Fill (t_fill) = ℓ / v_d = ${tFill.toFixed(4)} min\n`;
+                    text += `       * Discharged Before Full Occupation (N_out) = min(N_i,max, Q_out * t_fill) = ${nOut.toFixed(2)}\n`;
+                    text += `       * Effective People for delay (N_i,eff) = max(0, N_i,max - N_out) = ${nEff.toFixed(2)}\n`;
 
-                    text += `     - Formula: τ = ℓ / v_gran + N_eff * (1/Q_out - 1/Q_in)\n`;
+                    text += `     - Normative formula (Annex 8a III.5(b)): τ = ℓ / v_gran + N_i,eff * [1/(q_gran*δ_i) - 1/(Σ(δ_i-1*q_i-1))]\n`;
+                    text += `     - Equivalent implemented form: τ = ℓ / v_gran + N_i,eff * (1/Q_out - 1/Q_in)\n`;
 
                     const val = (1 / Q_out) - (1 / Q_in);
-                    const delay = ds.N_eff * Math.max(0, val);
+                    const delay = nEff * Math.max(0, val);
 
                     text += `     - Term 1: Travel Time (l/v_gran) = ${c.typeId.includes('door') && c.distance <= 0.7 ? '0' : (c.distance / (stats.v_gran || 10)).toFixed(4)} min\n`;
+                    text += `     - Queue Kernel (k = 1/Q_out - 1/Q_in) = ${delayKernel.toFixed(6)} min/person\n`;
                     text += `     - Term 2: Queue Delay = ${delay.toFixed(4)} min\n`;
                     text += `     - Total Time (τ) = ${(stats.time).toFixed(4)} min\n`;
                 } else {
@@ -394,8 +433,15 @@ class SalamanderCore {
     }
 }
 
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = SalamanderCore;
+}
+if (typeof window !== 'undefined') {
+    window.SalamanderCore = SalamanderCore;
+}
+
 // CLI Execution
-if (require.main === module) {
+if (typeof module !== 'undefined' && module.exports && typeof require === 'function' && require.main === module) {
     const args = process.argv.slice(2);
     if (args.length < 1) {
         console.log("Usage: node core.js <input.json> [output_proof.txt]");
@@ -406,6 +452,7 @@ if (require.main === module) {
     const outputFile = args[1] || 'mathproof.txt';
 
     try {
+        if (!fs) throw new Error("Node fs module is unavailable.");
         const jsonStr = fs.readFileSync(inputFile, 'utf8');
         const graphData = JSON.parse(jsonStr);
         const regsStr = fs.readFileSync('regulations.json', 'utf8');
@@ -429,5 +476,3 @@ if (require.main === module) {
         process.exit(1);
     }
 }
-
-module.exports = SalamanderCore;

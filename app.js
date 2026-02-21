@@ -611,474 +611,87 @@
   }
 
   // ─── Fire Safety Calculations ─────────────────────────────
+  // Single source of truth: core.js (SalamanderCore).
+  let calcEngine = null;
+
+  function ensureCalcEngine() {
+    if (calcEngine) return calcEngine;
+    if (typeof window.SalamanderCore !== 'function') return null;
+    calcEngine = new window.SalamanderCore(state.regulations);
+    return calcEngine;
+  }
+
+  function syncCalcEngineState() {
+    const engine = ensureCalcEngine();
+    if (!engine) return null;
+    engine.state.nodes = state.nodes;
+    engine.state.connections = state.connections;
+    engine.state.regulations = state.regulations;
+    engine.state.calculationMethod = state.calculationMethod;
+    engine.state.totalEvacuationTime = state.totalEvacuationTime;
+    return engine;
+  }
+
+  function applyCalcEngineState(engine) {
+    if (!engine || !engine.state) return;
+    state.totalEvacuationTime = Number(engine.state.totalEvacuationTime) || 0;
+  }
 
   function getSegmentParams(conn) {
-    if (!state.regulations) return null;
-
-    // Map connection type to regulations type
-    let type = 'horiz'; // Default
-    if (conn.typeId === 'stairs_up') type = 'stair_up';
-    else if (conn.typeId === 'stairs_down') type = 'stair_down';
-
-    // Get dimensions and flow
-    // Width: use direct property (conn.width) if available and valid
-    let width = (conn.width !== undefined && conn.width !== null) ? Number(conn.width) : 1.2;
-    if (isNaN(width) || width <= 0) width = 1.2;
-    width = Math.max(0.05, roundWidthMeters(width));
-    // Keep state in sync with the rounded width
-    conn.width = width;
-    // Fallback to props.width if conn.width failed? No, UI sets conn.width.
-
-    const length = conn.distance || 0;
-
-    // People: use source node's people count
-    const src = state.nodes.find(n => n.id === conn.sourceId);
-    const people = src ? (src.people || 0) : 0;
-
-    return { type, width, length, people };
+    const engine = syncCalcEngineState();
+    return engine ? engine.getSegmentParams(conn) : null;
   }
 
   function lookupTable11(segType, density) {
-    if (!state.regulations) return { v: 0, q: 0 };
-    const table = state.regulations.table_11_flow_params.data;
-    const colName = segType === 'horiz' ? 'horiz' :
-      segType === 'stair_down' ? 'stair_down' :
-        segType === 'stair_up' ? 'stair_up' : 'horiz';
-
-    // Find first row where D >= density (conservative)
-    // Table is sorted by D
-    let row = table.find(r => r.D >= density);
-    if (!row) row = table[table.length - 1]; // Cap at max
-
-    const val = row[colName];
-    return { v: val.v, q: val.q };
+    const engine = syncCalcEngineState();
+    return engine ? engine.lookupTable11(segType, density) : { v: 0, q: 0 };
   }
 
   function getLimitParams(typeId) {
-    if (!state.regulations || !state.regulations.limits) return { q_max: 164, q_gran: 135, v_gran: 14 };
-
-    const limits = state.regulations.limits;
-    let grp = limits.horizontal;
-    if (typeId === 'stairs_up' || typeId === 'stair_up') grp = limits.stairs_up;
-    else if (typeId === 'stairs_down' || typeId === 'stair_down') grp = limits.stairs_down;
-
-    return {
-      q_max: grp.q_max,
-      q_gran: grp.q_gran,
-      v_gran: grp.v_gran
-    };
+    const engine = syncCalcEngineState();
+    return engine ? engine.getLimitParams(typeId) : { q_max: 164, q_gran: 135, v_gran: 14 };
   }
 
   function sortConnectionsTopologically() {
-    // Basic Kahn's algorithm or DFS based on graph structure
-    // We need to order connections so we process upstream before downstream
-
-    // 1. Build adjacency
-    const adj = new Map();
-    state.nodes.forEach(n => adj.set(n.id, []));
-    state.connections.forEach(c => {
-      if (!adj.has(c.sourceId)) adj.set(c.sourceId, []);
-      adj.get(c.sourceId).push(c);
-    });
-
-    // 2. Compute in-degree for CONNECTIONS?
-    // Actually we need to traverse from Start Nodes.
-    // Let's do a BFS/Traversal from all Start nodes.
-
-    const sorted = [];
-    const visited = new Set();
-    const queue = [];
-
-    // Find start nodes
-    const startNodes = state.nodes.filter(n => ['start', 'start2'].includes(n.typeId));
-    startNodes.forEach(n => {
-      if (adj.has(n.id)) {
-        adj.get(n.id).forEach(c => {
-          if (!visited.has(c.id)) {
-            visited.add(c.id);
-            queue.push(c);
-          }
-        });
-      }
-    });
-
-    // This simple BFS might not respect true topology if there are merges where one branch is longer.
-    // Standard approach: Assign "order" to nodes.
-    // Let's stick to the existing propagation logic in 'propagateMaxTime' which was repeated pass.
-    // BUT for flow propagation, we need rigorous order.
-
-    // Alternative: Kahn's algo on the graph of segments.
-    // Node In-Degree.
-    const nodeInDegree = new Map();
-    state.nodes.forEach(n => nodeInDegree.set(n.id, 0));
-    state.connections.forEach(c => {
-      const d = nodeInDegree.get(c.targetId) || 0;
-      nodeInDegree.set(c.targetId, d + 1);
-    });
-
-    const nodeQueue = state.nodes.filter(n => (nodeInDegree.get(n.id) || 0) === 0);
-    const sortedNodes = [];
-
-    while (nodeQueue.length > 0) {
-      const n = nodeQueue.shift();
-      sortedNodes.push(n);
-
-      const outConns = state.connections.filter(c => c.sourceId === n.id);
-      outConns.forEach(c => {
-        const tgtId = c.targetId;
-        nodeInDegree.set(tgtId, (nodeInDegree.get(tgtId) || 0) - 1);
-        if (nodeInDegree.get(tgtId) === 0) {
-          const tgtNode = state.nodes.find(x => x.id === tgtId);
-          if (tgtNode) nodeQueue.push(tgtNode);
-        }
-      });
-    }
-
-    // If graph has cycles, some nodes won't be in sortedNodes.
-    // Fallback: add remaining nodes.
-    state.nodes.forEach(n => {
-      if (!sortedNodes.includes(n)) sortedNodes.push(n);
-    });
-
-    // Now flatten to connections
-    const sortedConns = [];
-    sortedNodes.forEach(n => {
-      const out = state.connections.filter(c => c.sourceId === n.id);
-      sortedConns.push(...out);
-    });
-
-    return sortedConns;
-  }
-
-  function getLimitParams(typeId) {
-    if (!state.regulations || !state.regulations.limits) return { q_max: 164, q_gran: 135, v_gran: 14 };
-
-    const limits = state.regulations.limits;
-    let grp = limits.horizontal;
-    if (typeId === 'stairs_up') grp = limits.stairs_up;
-    else if (typeId === 'stairs_down') grp = limits.stairs_down;
-
-    return {
-      q_max: grp.q_max,
-      q_gran: grp.q_gran,
-      v_gran: grp.v_gran
-    };
-  }
-
-  function sortConnectionsTopologically() {
-    // Basic Kahn's algorithm or DFS based on graph structure
-    // We need to order connections so we process upstream before downstream
-
-    // 1. Build adjacency
-    const adj = new Map();
-    state.nodes.forEach(n => adj.set(n.id, []));
-    state.connections.forEach(c => {
-      if (!adj.has(c.sourceId)) adj.set(c.sourceId, []);
-      adj.get(c.sourceId).push(c);
-    });
-
-    // 2. Compute in-degree for CONNECTIONS?
-    // Actually we need to traverse from Start Nodes.
-    // Let's do a BFS/Traversal from all Start nodes.
-
-    const sorted = [];
-    const visited = new Set();
-    const queue = [];
-
-    // Find start nodes
-    const startNodes = state.nodes.filter(n => ['start', 'start2'].includes(n.typeId));
-    startNodes.forEach(n => {
-      if (adj.has(n.id)) {
-        adj.get(n.id).forEach(c => {
-          if (!visited.has(c.id)) {
-            visited.add(c.id);
-            queue.push(c);
-          }
-        });
-      }
-    });
-
-    // This simple BFS might not respect true topology if there are merges where one branch is longer.
-    // Standard approach: Assign "order" to nodes.
-    // Let's stick to the existing propagation logic in 'propagateMaxTime' which was repeated pass.
-    // BUT for flow propagation, we need rigorous order.
-
-    // Alternative: Kahn's algo on the graph of segments.
-    // Node In-Degree.
-    const nodeInDegree = new Map();
-    state.nodes.forEach(n => nodeInDegree.set(n.id, 0));
-    state.connections.forEach(c => {
-      const d = nodeInDegree.get(c.targetId) || 0;
-      nodeInDegree.set(c.targetId, d + 1);
-    });
-
-    const nodeQueue = state.nodes.filter(n => (nodeInDegree.get(n.id) || 0) === 0);
-    const sortedNodes = [];
-
-    while (nodeQueue.length > 0) {
-      const n = nodeQueue.shift();
-      sortedNodes.push(n);
-
-      const outConns = state.connections.filter(c => c.sourceId === n.id);
-      outConns.forEach(c => {
-        const tgtId = c.targetId;
-        nodeInDegree.set(tgtId, (nodeInDegree.get(tgtId) || 0) - 1);
-        if (nodeInDegree.get(tgtId) === 0) {
-          const tgtNode = state.nodes.find(x => x.id === tgtId);
-          if (tgtNode) nodeQueue.push(tgtNode);
-        }
-      });
-    }
-
-    // If graph has cycles, some nodes won't be in sortedNodes.
-    // Fallback: add remaining nodes.
-    state.nodes.forEach(n => {
-      if (!sortedNodes.includes(n)) sortedNodes.push(n);
-    });
-
-    // Now flatten to connections
-    const sortedConns = [];
-    sortedNodes.forEach(n => {
-      const out = state.connections.filter(c => c.sourceId === n.id);
-      sortedConns.push(...out);
-    });
-
-    return sortedConns;
-  }
-
-  function calcMethodA() {
-    // Method A: Sum of travel times (Length / Speed)
-    state.connections.forEach(conn => {
-      const p = getSegmentParams(conn);
-      if (!p) { conn.travelTime = 0; return; }
-
-      const area = p.length * p.width;
-      const density = area > 0 ? p.people / area : 0;
-
-      const { v } = lookupTable11(p.type, density);
-
-      // Time in minutes = Length (m) / Speed (m/min)
-      // If speed is 0, time is infinite? Or blocked.
-      // For static calc, if v=0, usually means blocked.
-      conn.travelTime = v > 0.1 ? p.length / v : 9999;
-
-      conn.calcStats = { density, v, q: 0, time: conn.travelTime, method: 'A' };
-    });
-
-    propagateMaxTime();
-  }
-
-  function calcMethodB() {
-    // Method B: Capacity / Throughput (Number of People / (Specific Throughput * Width))
-    // t = N / Q, where Q = q * w
-
-    // Reset state: congestion, time, temporary flow tracking
-    state.connections.forEach(c => {
-      c.congestion = 'none';
-      c.travelTime = 0;
-      c.flowState = { Q_in: 0, q_spec: 0, Q_out: 0, hasQueue: false };
-    });
-
-    // 2. Topological Sort to ensure upstream is processed first
-    const sortedConns = sortConnectionsTopologically();
-
-    sortedConns.forEach(conn => {
-      const src = state.nodes.find(n => n.id === conn.sourceId);
-      const p = getSegmentParams(conn);
-      if (!p || !src) return;
-
-      let q_curr = 0;   // Specific flow (p/m/min)
-      let Q_curr = 0;   // Total flow (p/min)
-      let v_curr = 0;   // Speed (m/min)
-
-      // --- Step 1: Determine Incoming Flow ---
-      const incomingConns = state.connections.filter(c => c.targetId === conn.sourceId);
-      const isInitial = incomingConns.length === 0 || ['start', 'start2'].includes(src.typeId);
-
-      if (isInitial) {
-        // Initial: Compute from Density (D = N/A)
-        const area = p.length * p.width;
-        const density = area > 0 ? (src.people || 0) / area : 0;
-        const table = lookupTable11(p.type, density);
-        v_curr = table.v;
-        q_curr = table.q;
-        Q_curr = q_curr * p.width;
-
-        // Formula 1: t = L / v
-        conn.travelTime = v_curr > 0.1 ? p.length / v_curr : 0;
-      } else {
-        // Downstream: Propagate Flow (Sum of Q_prev)
-        let Q_total_in = 0;
-        incomingConns.forEach(inc => {
-          Q_total_in += (inc.flowState ? inc.flowState.Q_out : 0);
-        });
-
-        // Distribute flow if branching (proportional to width)
-        const outConns = state.connections.filter(c => c.sourceId === conn.sourceId);
-        const totalOutWidth = outConns.reduce((sum, c) => sum + (parseFloat(c.props.width) || 1.2), 0);
-        const ratio = totalOutWidth > 0 ? (p.width / totalOutWidth) : 1;
-
-        Q_curr = Q_total_in * ratio;
-        q_curr = p.width > 0 ? Q_curr / p.width : 0;
-      }
-
-      // --- Step 2: Bottleneck Check & Queue Handling ---
-      const limits = getLimitParams(p.type);
-      const q_max = limits.q_max;
-
-      let hasQueue = false;
-      let final_Q_out = Q_curr;
-
-      if (q_curr > q_max) {
-        // Case B: Queue Forms
-        hasQueue = true;
-        conn.congestion = 'blocked';
-
-        // Formula 2 (Norm 2, pg 6):
-        // t = (L / v_gran) + N * (1/Q_out - 1/Q_in)
-
-        const N_total = p.people || 0;
-        const Q_out = p.width * limits.q_gran;
-        const Q_in = Q_curr;
-
-        // Norm 2 Clause I.11 Dynamic Reduction
-        // Instead of v_free (100 m/min), we use the actual speed based on density (D = N/A).
-        // This gives a more realistic "Time to Cross" for the population.
-
-        const area = p.length * p.width;
-        const density = area > 0 ? (p.people || 0) / area : 0;
-        const table = lookupTable11(p.type, density);
-        const v_density = table.v > 0.1 ? table.v : 100; // Fallback to 100 if v=0 (jammed? no, v=0 at high D)
-
-        // Time to cross for the group
-        const t_filling = (p.length / v_density);
-
-        const N_out = Q_out * t_filling;
-        const N_eff = Math.max(0, N_total - N_out);
-
-        // Store for report
-        conn.dynamicStats = { N_total, t_filling, N_out, N_eff, v_density, density };
-
-        // Travel Term (now t_filling)
-        let travelTerm = t_filling;
-
-        // Delay Term
-        let delayTerm = 0;
-        if (Q_out > 0.1 && Q_in > 0.1) {
-          // If Q_in > Q_out, we have a bottleneck delay
-          // The formula technically subtracts arrival rate.
-          // t = L/v + N*(1/Q_out - 1/Q_in)
-          // If N is large, this term dominates.
-          // If Q_in is very large (instant arrival), 1/Q_in -> 0.
-          const val = (1 / Q_out) - (1 / Q_in);
-          // Ensure term is non-negative?
-          // If Q_in < Q_out (no queue should form), but check logic says q > q_max.
-          // q > q_max implies Q_in/w > q_max.
-          // Q_out = w * q_gran.
-          // Usually q_gran < q_max. So Q_in might be > Q_out.
-          delayTerm = N_eff * Math.max(0, val);
-        } else if (Q_out > 0.1) {
-          // Fallback if Q_in is 0? 
-          delayTerm = N_total / Q_out;
-        }
-
-        conn.travelTime = travelTerm + delayTerm;
-
-        // Propagate BOUNDARY flow downstream
-        final_Q_out = Q_out;
-
-      } else {
-        // Case A: No Queue
-        conn.congestion = 'none';
-        final_Q_out = Q_curr;
-
-        if (!isInitial) {
-          // Determine speed from q_curr (Conservative lookup)
-          const tableData = state.regulations.table_11_flow_params.data;
-          // Find row where table_q >= q_curr
-          let row = tableData.find(r => {
-            const cell = (r[p.type] || r['horiz']);
-            return cell.q >= q_curr;
-          });
-          if (!row) row = tableData[tableData.length - 1];
-
-          const cell = (row[p.type === 'horiz' ? 'horiz' : p.type] || row['horiz']);
-          v_curr = cell.v || 100;
-
-          conn.travelTime = v_curr > 0.1 ? p.length / v_curr : 0;
-        }
-      }
-
-      // Store state for downstream
-      conn.flowState = {
-        Q_in: Q_curr,
-        q_spec: q_curr,
-        Q_out: final_Q_out,
-        hasQueue: hasQueue
-      };
-
-      conn.calcStats = {
-        density: 0,
-        v: v_curr,
-        q: q_curr,
-        Q: Q_curr,
-        time: conn.travelTime,
-        method: 'B',
-        q_max: q_max,
-        q_gran: limits.q_gran,
-        v_gran: limits.v_gran
-      };
-    });
-
-    propagateMaxTime();
+    const engine = syncCalcEngineState();
+    return engine ? engine.sortConnectionsTopologically() : [];
   }
 
   function propagateMaxTime() {
-    // Reset maxTime
-    state.nodes.forEach(n => n.maxTime = 0);
+    const engine = syncCalcEngineState();
+    if (!engine) return;
+    engine.propagateMaxTime();
+    applyCalcEngineState(engine);
+  }
 
-    // Initial time at Source nodes?
-    // Usually 0 unless start delay.
+  function calcMethodA() {
+    const engine = syncCalcEngineState();
+    if (!engine) return;
+    engine.calcMethodA();
+    applyCalcEngineState(engine);
+  }
 
-    // Topological sort or multi-pass
-    for (let pass = 0; pass < state.nodes.length + 1; pass++) {
-      let changed = false;
-      for (const conn of state.connections) {
-        const src = state.nodes.find(n => n.id === conn.sourceId);
-        const tgt = state.nodes.find(n => n.id === conn.targetId);
-        if (!src || !tgt) continue;
-
-        // Cumulative time
-        const newTime = (src.maxTime || 0) + (conn.travelTime || 0);
-        if (newTime > (tgt.maxTime || 0)) {
-          tgt.maxTime = newTime;
-          changed = true;
-        }
-      }
-      if (!changed) break;
-    }
-
-    // Total time is the max of all Exit nodes
-    const exitNodes = state.nodes.filter(n => n.typeId === 'exit');
-    let maxT = 0;
-    if (exitNodes.length > 0) {
-      maxT = Math.max(...exitNodes.map(n => n.maxTime));
-    } else {
-      maxT = Math.max(...state.nodes.map(n => n.maxTime), 0);
-    }
-    state.totalEvacuationTime = maxT;
+  function calcMethodB() {
+    const engine = syncCalcEngineState();
+    if (!engine) return;
+    engine.calcMethodB();
+    applyCalcEngineState(engine);
   }
 
   function recalcFireSafety() {
     if (!state.regulations) return;
-
-    if (state.calculationMethod === 'A') {
-      calcMethodA();
+    const engine = syncCalcEngineState();
+    if (!engine) {
+      console.error('SalamanderCore is not loaded. Calculations are unavailable.');
+      state.totalEvacuationTime = 0;
+    } else if (state.calculationMethod === 'A') {
+      engine.calcMethodA();
+      applyCalcEngineState(engine);
     } else {
-      calcMethodB();
+      engine.calcMethodB();
+      applyCalcEngineState(engine);
     }
 
-    // Update Display
     if (totalTimeDisplay) {
       totalTimeDisplay.textContent = state.totalEvacuationTime.toFixed(3);
     }
@@ -4332,6 +3945,7 @@
         <li>Наредба № Iз-1971, чл. 58, чл. 63, приложение № 8а/№ 9.</li>
         <li>Таблица 11: скорост v и специфична пропускателна способност q по плътност D.</li>
         <li>Таблица 12: параметри за врати/отвори с широчина до 1,6 m.</li>
+        <li>Приложение № 8а, раздел I, т. 11: при плътност не се отчитат хората, напуснали участъка до неговото запълване (логика за N<sub>eff</sub>).</li>
         <li>${note('Model precision: L and δ rounded to 0.05 m; total time to 0.001 min.', 'Точност на модела: L и δ закръглени до 0,05 m; общо време до 0,001 min.')}</li>
       </ul>
       ${lawQuote('Чл. 63. (1) ... специфичната пропускателна способност (СПС) ... и скоростта ... се приемат съгласно табл. 11.', 'Наредба № Iз-1971, чл. 63, ал. 1')}
@@ -4347,17 +3961,23 @@
           'Определящото условие е сравнението qᵢ спрямо qmax. При qᵢ > qmax задължително се прилага клон „със задръжка“.'
         )}</p>
         <p>${note(
-          'Computation is executed upstream to downstream: incoming flow is determined first, then legal capacity checks are applied, then the segment time τᵢ is resolved.',
-          'Computation is executed upstream to downstream: incoming flow is determined first, then legal capacity checks are applied, then the segment time τᵢ is resolved.'
+          'Computation is executed upstream-to-downstream: incoming flow is resolved first, legal capacity checks are then applied, and finally τᵢ is calculated.',
+          'Изчислението се изпълнява от горните към долните участъци: първо се определя входящият поток, после се правят нормативните проверки за пропускателна способност и накрая се намира τᵢ.'
         )}</p>
         <p>${note(
-          'Units are tracked explicitly in every step: q [persons/(m·min)], δ [m], Q [persons/min], v [m/min], L [m], τ [min].',
-          'Units are tracked explicitly in every step: q [persons/(m·min)], δ [m], Q [persons/min], v [m/min], L [m], τ [min].'
+          'Units are tracked explicitly: q [persons/(m·min)], δ [m], Q [persons/min], v [m/min], L [m], τ [min], N [persons].',
+          'Единиците се следят явно: q [чов./(m·min)], δ [m], Q [чов./min], v [m/min], L [m], τ [min], N [чов.].'
         )}</p>
         ${eqLine('Q<sub>i</sub>', 'q<sub>i</sub> · δ<sub>i</sub>', note('flow through section i', 'поток през участък i'))}
         ${eqLine('q<sub>i</sub>', eqFrac('q<sub>i-1</sub> · δ<sub>i-1</sub>', 'δ<sub>i</sub>'), note('single incoming stream', 'един входящ поток'))}
-        ${eqLine('τ<sub>i</sub>', eqFrac('L<sub>i</sub>', 'v<sub>i</sub>'), note('if q<sub>i</sub> ≤ q<sub>max</sub>', 'ако q<sub>i</sub> ≤ q<sub>max</sub>'))}
-        ${eqLine('τ<sub>i</sub>', `${eqFrac('L<sub>i</sub>', 'v<sub>гран</sub>')} + N<sub>eff</sub> · (${eqFrac('1', 'Q<sub>out</sub>')} − ${eqFrac('1', 'Q<sub>in</sub>')})`, note('if q<sub>i</sub> > q<sub>max</sub>', 'ако q<sub>i</sub> > q<sub>max</sub>'))}
+        ${eqLine('D<sub>ai</sub>', eqFrac('N<sub>i,max</sub>', 'A<sub>i</sub>'), note('A_i = l_i · δ_i', 'A_i = l_i · δ_i'))}
+        ${eqLine('t<sub>fill</sub>', eqFrac('L<sub>i</sub>', 'v(D<sub>ai</sub>)'), note('fill time used for Ni correction by item I.11', 'време за запълване за корекция на Ni по т. I.11'))}
+        ${eqLine('N<sub>out</sub>', 'min(N<sub>i,max</sub>, Q<sub>out</sub> · t<sub>fill</sub>)', note('people who leave before full section occupation', 'хора, напуснали преди пълно запълване на участъка'))}
+        ${eqLine('N<sub>i,eff</sub>', 'max(0, N<sub>i,max</sub> − N<sub>out</sub>)', note('effective Ni for delay term under Annex 8a, I.11', 'ефективно Ni за члена със задръжка по прил. 8а, т. I.11'))}
+        ${eqLine('τ<sub>i</sub>', eqFrac('L<sub>i</sub>', 'v<sub>i</sub>'), note('if qi <= qmax', 'ако qi <= qmax'))}
+        ${eqLine('τ<sub>i</sub>', `${eqFrac('L<sub>i</sub>', 'v<sub>гран</sub>')} + N<sub>i,eff</sub> · (${eqFrac('1', 'Q<sub>out</sub>')} − ${eqFrac('1', 'Q<sub>in</sub>')})`, note('if qi > qmax', 'ако qi > qmax'))}
+        ${eqLine('Q<sub>out</sub>', 'q<sub>гран</sub> · δ<sub>i</sub>', note('Annex 8a, III.5(b)', 'прил. 8а, III.5, б. „б“'))}
+        ${eqLine('Q<sub>in</sub>', 'Σ(δ<sub>i-1</sub> · q<sub>i-1</sub>)', note('incoming capacity term in Annex 8a formula', 'входящ член от формулата по прил. 8а'))}
         ${eqLine('τ<sub>ев</sub>', 'Σ τ<sub>i</sub>', note('sum to final evacuation exit', 'сума до крайния евакуационен изход'))}
       `
       : `
@@ -4412,8 +4032,37 @@
           const qGran = Number(row.qGran) || 0;
           const vGran = Number(row.vGran) || 0;
           const ds = row.dynamicStats || {};
-          const nEff = Number(ds.N_eff);
-          const nEffSafe = Number.isFinite(nEff) ? nEff : n;
+          const nTotal = Number.isFinite(Number(ds.N_total)) ? Number(ds.N_total) : n;
+          const vDensity = Number.isFinite(Number(ds.v_density)) ? Number(ds.v_density) : v;
+          const densityEff = Number.isFinite(Number(ds.density))
+            ? Number(ds.density)
+            : (area > 0 ? (nTotal / area) : 0);
+          const densityLine = area > 0
+            ? `${eqFrac(`${num(nTotal, 3)}`, `${num(area, 3)}`)} = ${num(densityEff, 3)} чов./m²`
+            : `${num(densityEff, 3)} чов./m²`;
+          const tFill = Number.isFinite(Number(ds.t_filling))
+            ? Number(ds.t_filling)
+            : (vDensity > 0 ? (l / vDensity) : 0);
+          const nOut = Number.isFinite(Number(ds.N_out))
+            ? Number(ds.N_out)
+            : Math.max(0, Math.min(nTotal, QOut * tFill));
+          const nEff = Number.isFinite(Number(ds.N_eff))
+            ? Number(ds.N_eff)
+            : Math.max(0, nTotal - nOut);
+          const travelTerm = Number.isFinite(Number(ds.travelTerm))
+            ? Number(ds.travelTerm)
+            : (vGran > 0 ? (l / vGran) : 0);
+          const delayKernel = Number.isFinite(Number(ds.delayKernel))
+            ? Number(ds.delayKernel)
+            : (
+              (QOut > 0 && QIn > 0)
+                ? Math.max(0, (1 / QOut) - (1 / QIn))
+                : (QOut > 0 ? (1 / QOut) : 0)
+            );
+          const delayTerm = Number.isFinite(Number(ds.delayTerm))
+            ? Number(ds.delayTerm)
+            : (nEff * delayKernel);
+          const capacityDeficit = QIn - QOut;
           const outConns = row.conn ? state.connections.filter(c => c.sourceId === row.conn.sourceId) : [];
           const totalOutWidth = outConns.reduce((sum, c) => sum + Math.max(0.05, Number(c.width) || 1.2), 0);
           const splitRatio = totalOutWidth > 0 ? d / totalOutWidth : 1;
@@ -4442,22 +4091,37 @@
           )}</p>`);
 
           if (qi > qMax || row.hasQueue || row.severity === 'blocked') {
-            const travelTerm = vGran > 0 ? (l / vGran) : 0;
-            const delayTerm = (QOut > 0 && QIn > 0) ? nEffSafe * Math.max(0, (1 / QOut) - (1 / QIn)) : 0;
             lines.push(`<p>${note(
-              'Queue branch decomposition: first term is constrained travel at v_gran, second term is queue discharge delay due to finite outlet capacity.',
-              'Queue branch decomposition: first term is constrained travel at v_gran, second term is queue discharge delay due to finite outlet capacity.'
+              'Queue branch is applied under Annex 8a, Section III, item 5(b): q_i exceeds q_max, therefore movement is constrained by boundary parameters.',
+              'Прилага се клон „със задръжка“ по приложение № 8а, раздел III, т. 5, буква „б“: q_i превишава q_max и движението се ограничава от граничните параметри.'
             )}</p>`);
             lines.push(eqLine('v<sub>гран</sub>', `${num(vGran, 3)} m/min`));
             lines.push(eqLine('q<sub>гран</sub>', `${num(qGran, 3)} чов./m·min`));
             lines.push(eqLine('Q<sub>in</sub>', `${num(QIn, 3)} чов./min`));
             lines.push(eqLine('Q<sub>out</sub>', `${num(QOut, 3)} чов./min`));
-            lines.push(eqLine('N<sub>eff</sub>', `${num(nEffSafe, 3)} чов.`));
+            lines.push(eqLine('ΔQ', `${num(QIn, 3)} − ${num(QOut, 3)} = ${num(capacityDeficit, 3)} чов./min`, note('positive value indicates bottleneck loading', 'положителна стойност показва натоварване на тясно място')));
+            lines.push(`<p>${note(
+              'By Annex 8a, Section I, item 11, N_i for delay is corrected by excluding people discharged before full segment occupation.',
+              'Съгласно приложение № 8а, раздел I, т. 11, Ni за члена със задръжка се коригира, като се изключат хората, напуснали участъка преди пълното му запълване.'
+            )}</p>`);
+            lines.push(eqLine('D<sub>ai</sub>', densityLine, note('density class for v(D_ai) lookup from Table 11', 'клас на плътност за v(D_ai) по табл. 11')));
+            lines.push(eqLine('v(D<sub>ai</sub>)', `${num(vDensity, 3)} m/min`));
+            lines.push(eqLine('t<sub>fill</sub>', `${eqFrac(`${num(l, 3)}`, `${num(vDensity, 3)}`)} = ${num(tFill, 4)} min`));
+            lines.push(eqLine('N<sub>i,max</sub>', `${num(nTotal, 3)} чов.`, note('maximum people in the segment from model stream assignment', 'максимален брой хора в участъка от потоковото разпределение в модела')));
+            lines.push(eqLine('N<sub>out</sub>', `min(${num(nTotal, 3)}, ${num(QOut, 3)} · ${num(tFill, 4)}) = ${num(nOut, 3)} чов.`));
+            lines.push(eqLine('N<sub>i,eff</sub>', `max(0, ${num(nTotal, 3)} − ${num(nOut, 3)}) = ${num(nEff, 3)} чов.`));
+            lines.push(eqLine('k<sub>queue</sub>', `${eqFrac('1', `${num(QOut, 3)}`)} − ${eqFrac('1', `${num(QIn, 3)}`)} = ${num(delayKernel, 6)} min/чов.`));
+            lines.push(eqLine('τ<sub>i</sub> (Annex 8a)', `${eqFrac('L<sub>i</sub>', 'v<sub>гран</sub>')} + N<sub>i,eff</sub> · [${eqFrac('1', 'q<sub>гран</sub> · δ<sub>i</sub>')} − ${eqFrac('1', 'Σ(δ<sub>i-1</sub>·q<sub>i-1</sub>)')}]`, note('normative form from Annex 8a, III.5(b)', 'нормативен вид по прил. 8а, III.5, б. „б“')));
             lines.push(eqLine(
-              'τ<sub>i</sub>',
-              `${eqFrac(`${num(l, 3)}`, `${num(vGran, 3)}`)} + ${num(nEffSafe, 3)} · (${eqFrac('1', `${num(QOut, 3)}`)} − ${eqFrac('1', `${num(QIn, 3)}`)})`
+              'τ<sub>i</sub> (equivalent)',
+              `${eqFrac(`${num(l, 3)}`, `${num(vGran, 3)}`)} + ${num(nEff, 3)} · (${eqFrac('1', `${num(QOut, 3)}`)} − ${eqFrac('1', `${num(QIn, 3)}`)})`,
+              note('using Q_out = q_gran·δ_i and Q_in = Σ(δ_(i-1)·q_(i-1))', 'с еквивалентностите Q_out = q_гран·δ_i и Q_in = Σ(δ_(i-1)·q_(i-1))')
             ));
             lines.push(eqLine('τ<sub>i</sub>', `${num(travelTerm, 4)} + ${num(delayTerm, 4)} = ${num(τ, 4)} min`));
+            lines.push(`<p>${note(
+              'Dimensional check: N_i,eff [persons] × k_queue [min/person] = [min]; this term is added to L_i / v_gran [min].',
+              'Проверка на размерност: N_i,eff [чов.] × k_queue [min/чов.] = [min]; този член се добавя към L_i / v_гран [min].'
+            )}</p>`);
           } else {
             lines.push(`<p>${note(
               'Free-flow branch: no queue term is added; travel time is purely geometric (distance over speed).',
@@ -4530,9 +4194,11 @@
 
     const citationsHtml = `
       <h4>${escHtml(t('proof.citations', null, 'Quoted Bulgarian Legal Text (reference excerpts)'))}</h4>
+      ${lawQuote('При определяне на плътността ... не се отчитат хората, успели да напуснат участъка до неговото запълване.', 'Приложение № 8а, раздел I, т. 11')}
       ${lawQuote('След всяко получаване на текущата специфична пропускателна способност qi стойността ѝ се сравнява с максимално възможната за дадения вид път (qmax)...', 'Приложение 8а, раздел III, т. 5')}
       ${lawQuote('... за хоризонтални участъци максимално възможната стойност ... е 164,2 чов./m.min, за врати ... 199,1 чов./m.min ...', 'Приложение 8а, раздел III, т. 5; чл. 63, ал. 5')}
       ${lawQuote('Когато ... q_i е по-голяма от qmax ... движението ще се извършва при гранична плътност ... с параметри vгран и qгран.', 'Приложение 8а, раздел III, т. 5, буква „б“')}
+      ${lawQuote('Времето за преминаване през участък със задръжка се определя по формулата ... където Ni е брой на хората в участък i.', 'Приложение № 8а, раздел III, т. 5, буква „б“ (продължение на формулата)')}
       ${lawQuote('Вратите/отворите ... се считат за отделни участъци ... при стена с дебелина до 0,7 m ... дължината ... се приема 0.', 'Приложение 8а, раздел III, т. 6')}
       ${lawQuote('Изчислителното време за евакуация ... е сумата от времената ... през всички участъци (без и със задръжки).', 'Приложение 8а, раздел III, т. 7')}
     `;
