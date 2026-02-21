@@ -217,6 +217,37 @@
     return fallbackName || typeId || '';
   }
 
+  function getConnectionDisplayName(conn, options = {}) {
+    const { includeId = false } = options;
+    const idNum = Number(conn && conn.id);
+    const idLabel = Number.isFinite(idNum) ? `#${idNum}` : '#?';
+    const raw = (conn && typeof conn.name === 'string') ? conn.name.trim() : '';
+    if (!raw) return idLabel;
+    return includeId ? `${idLabel} ${raw}` : raw;
+  }
+
+  function fitLabelTextByWidth(context, text, maxWidth, minChars = 3) {
+    const base = String(text || '').trim();
+    if (!base) return '';
+    if (!Number.isFinite(maxWidth) || maxWidth <= 0) return base;
+    if (context.measureText(base).width <= maxWidth) return base;
+
+    let lo = 1;
+    let hi = base.length;
+    let best = '';
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      const candidate = `${base.slice(0, mid).trimEnd()}...`;
+      if (context.measureText(candidate).width <= maxWidth) {
+        best = candidate;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return best || `${base.slice(0, Math.max(1, minChars))}...`;
+  }
+
   function getMethodLabel(methodId, longForm = false) {
     const method = methodId === 'B' ? 'B' : 'A';
     if (longForm) {
@@ -1195,7 +1226,7 @@
       `${t('overlay.project', null, 'Project')}: ${projectName} | ${t('overlay.method', null, 'Method')}: ${info.methodLabel}`,
       `${t('overlay.mode', null, 'Mode')}: ${info.modeLabel} | ${t('overlay.orderGraph', null, 'Order Graph')}: ${orderGraphEnabled ? t('common.on', null, 'ON') : t('common.off', null, 'OFF')} | ${t('overlay.zoom', null, 'Zoom')}: ${Math.round(cam.zoom * 100)}%`,
       `${t('overlay.nodes', null, 'Nodes')}: ${state.nodes.length} (${t('overlay.start', null, 'Start')} ${info.counts.start + info.counts.start2}, ${t('overlay.exit', null, 'Exit')} ${info.counts.exit}, ${t('overlay.door', null, 'Door')} ${info.counts.door}, ${t('overlay.waypoint', null, 'Waypoint')} ${info.counts.waypoint}, ${t('overlay.pinned', null, 'Pinned')} ${info.pinnedCount})`,
-      `${t('overlay.connections', null, 'Connections')}: ${info.connectionCount} | ${t('overlay.bottlenecks', null, 'Bottlenecks')}: ${info.bottleneckCount} | ${t('overlay.blocked', null, 'Blocked')}: ${info.blockedCount} | ${t('overlay.queues', null, 'Queues')}: ${info.queueCount}`,
+      `${t('overlay.connections', null, 'Connections')}: ${info.connectionCount} | ${t('overlay.bottlenecks', null, 'Bottlenecks')}: ${info.bottleneckCount}`,
       `${t('overlay.totalPeople', null, 'Total People')}: ${info.totalPeople} | ${t('overlay.totalTime', null, 'Evac Time')}: ${info.totalTime.toFixed(3)} min | ${t('overlay.criticalExits', null, 'Critical Exits')}: ${info.criticalExits}`,
       `${t('overlay.graphSize', null, 'Graph Size')}: ${info.bounds.widthM.toFixed(2)}m x ${info.bounds.heightM.toFixed(2)}m | ${t('overlay.selection', null, 'Selection')}: ${info.selectedCount} ${itemWord}`,
     ];
@@ -1432,11 +1463,13 @@
     ctx.textBaseline = 'top';
     ctx.fillText(label, s.x, s.y + r + 6);
 
-    // Type badge
-    const badgeFontPx = Math.max(8, Math.min(13, 8 + r * 0.18));
-    ctx.font = `${badgeFontPx}px Inter, sans-serif`;
-    ctx.fillStyle = nt.color;
-    ctx.fillText(getNodeTypeDisplayName(node.typeId, nt.name), s.x, s.y + r + 6 + Math.max(12, labelFontPx + 2));
+    // Type badge (shown only for selected node)
+    if (isSelected) {
+      const badgeFontPx = Math.max(8, Math.min(13, 8 + r * 0.18));
+      ctx.font = `${badgeFontPx}px Inter, sans-serif`;
+      ctx.fillStyle = nt.color;
+      ctx.fillText(getNodeTypeDisplayName(node.typeId, nt.name), s.x, s.y + r + 6 + Math.max(12, labelFontPx + 2));
+    }
 
     if (node.pinned) {
       const px = s.x + r * 0.62;
@@ -1633,6 +1666,10 @@
     let label = fullLabel;
     if (fullW > available) label = shortLabel;
     if (shortW > available) label = compactLabel;
+    ctx.save();
+    ctx.font = `${fontPx}px Inter, sans-serif`;
+    label = fitLabelTextByWidth(ctx, label, available, 8);
+    ctx.restore();
 
     const midX = (s.x + e.x) / 2 + nx * Math.max(5, Math.min(11, pixelWidth * 0.45));
     const midY = (s.y + e.y) / 2 + ny * Math.max(5, Math.min(11, pixelWidth * 0.45));
@@ -1656,6 +1693,34 @@
     ctx.fillStyle = '#f0f6fc';
     ctx.fillText(label, 0, 0);
     ctx.restore();
+
+    // Connection name label on the opposite side of the segment.
+    const connNameBase = getConnectionDisplayName(conn);
+    const nameFontPx = Math.max(7, Math.min(9.5, 7 + cam.zoom * 0.5));
+    ctx.save();
+    ctx.font = `${nameFontPx}px Inter, sans-serif`;
+    const nameLabel = fitLabelTextByWidth(ctx, connNameBase, available, 3);
+    ctx.restore();
+
+    if (nameLabel) {
+      const nameX = (s.x + e.x) / 2 - nx * Math.max(5, Math.min(11, pixelWidth * 0.45));
+      const nameY = (s.y + e.y) / 2 - ny * Math.max(5, Math.min(11, pixelWidth * 0.45));
+
+      ctx.save();
+      ctx.translate(nameX, nameY);
+      ctx.rotate(labelAngle);
+      ctx.font = `${nameFontPx}px Inter, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const nameW = ctx.measureText(nameLabel).width;
+      ctx.fillStyle = 'rgba(13,17,23, 0.78)';
+      ctx.beginPath();
+      ctx.roundRect(-nameW / 2 - 3, -5, nameW + 6, 10, 3);
+      ctx.fill();
+      ctx.fillStyle = '#c9d1d9';
+      ctx.fillText(nameLabel, 0, 0);
+      ctx.restore();
+    }
 
     // Distance label below
     // (Old distance label removed to avoid clutter)
@@ -1834,6 +1899,7 @@
     const dMidTgt = dist(newNode, tgt);
     const conn1 = {
       id: state.nextConnId++,
+      name: (typeof conn.name === 'string') ? conn.name : '',
       sourceId: conn.sourceId,
       targetId: newNode.id,
       typeId: conn.typeId,
@@ -1851,6 +1917,7 @@
     }
     const conn2 = {
       id: state.nextConnId++,
+      name: (typeof conn.name === 'string') ? conn.name : '',
       sourceId: newNode.id,
       targetId: conn.targetId,
       typeId: conn.typeId,
@@ -1929,6 +1996,7 @@
 
     const conn = {
       id: state.nextConnId++,
+      name: '',
       sourceId: srcId,
       targetId: tgtId,
       typeId: state.connTypes[0].id,
@@ -1987,8 +2055,12 @@
     if (!can12 && can21) direction = 'backward';
     if (!can12 && !can21) return null;
 
+    const mergedName = ((typeof c1.name === 'string' ? c1.name.trim() : '') ||
+      (typeof c2.name === 'string' ? c2.name.trim() : ''));
+
     const mergedConn = {
       id: state.nextConnId++,
+      name: mergedName,
       sourceId: n1,
       targetId: n2,
       typeId: c1.typeId,
@@ -3294,6 +3366,7 @@
           if (data.connections) {
             state.connections = data.connections.map((c) => {
               const next = { ...c };
+              next.name = (typeof next.name === 'string') ? next.name : '';
               const specified = Number(next.specifiedDistance);
               const legacyDesired = Number(next.desiredDistance);
               if (Number.isFinite(specified) && specified > 0) {
@@ -3565,6 +3638,8 @@
       rows.push({
         step: idx + 1,
         connId: conn.id,
+        connName: getConnectionDisplayName(conn, { includeId: true }),
+        connShortName: getConnectionDisplayName(conn),
         conn,
         src,
         tgt,
@@ -3962,6 +4037,10 @@
       let label = fullLabel;
       if (fullW > available) label = shortLabel;
       if (shortW > available) label = compactLabel;
+      repCtx.save();
+      repCtx.font = `${labelFontPx}px Inter, sans-serif`;
+      label = fitLabelTextByWidth(repCtx, label, available, 8);
+      repCtx.restore();
 
       const ux = dx / len;
       const uy = dy / len;
@@ -3990,6 +4069,33 @@
       repCtx.fillStyle = isLight ? '#1f2937' : '#e5e7eb';
       repCtx.fillText(label, 0, 0);
       repCtx.restore();
+
+      const connNameBase = row.connShortName || getConnectionDisplayName(row.conn);
+      const nameFontPx = Math.max(6.5, Math.min(8.5, 7.2 + scale * 0.55));
+      repCtx.save();
+      repCtx.font = `${nameFontPx}px Inter, sans-serif`;
+      const connName = fitLabelTextByWidth(repCtx, connNameBase, available, 3);
+      repCtx.restore();
+
+      if (connName) {
+        const nxPos = (s.x + t.x) * 0.5 - nx * labelOffset;
+        const nyPos = (s.y + t.y) * 0.5 - ny * labelOffset;
+
+        repCtx.save();
+        repCtx.translate(nxPos, nyPos);
+        repCtx.rotate(labelAngle);
+        repCtx.font = `${nameFontPx}px Inter, sans-serif`;
+        repCtx.textAlign = 'center';
+        repCtx.textBaseline = 'middle';
+        const nw = repCtx.measureText(connName).width;
+        repCtx.fillStyle = isLight ? 'rgba(255,255,255,0.86)' : 'rgba(13,17,23,0.78)';
+        repCtx.beginPath();
+        repCtx.roundRect(-nw / 2 - 3, -5, nw + 6, 10, 3);
+        repCtx.fill();
+        repCtx.fillStyle = isLight ? '#334155' : '#cbd5e1';
+        repCtx.fillText(connName, 0, 0);
+        repCtx.restore();
+      }
     });
 
     const nodeTypeMap = new Map(state.nodeTypes.map(t => [t.id, t]));
@@ -4122,7 +4228,7 @@
     const timeText = row.time >= 9999 ? 'Inf' : formatNumeric(row.time, 3);
 
     if (key === 'step') return String(row.step);
-    if (key === 'conn') return `#${row.connId}`;
+    if (key === 'conn') return row.connName || `#${row.connId}`;
     if (key === 'from') return row.fromName;
     if (key === 'to') return row.toName;
     if (key === 'type') return row.typeName;
@@ -4185,44 +4291,89 @@
       mathProofContent.textContent = t('alert.noReportData', null, 'No report data available.');
       return;
     }
+    const isBg = currentLanguage === 'bg';
+    const num = (value, digits = 3, fallback = '0.000') => formatNumeric(value, digits, fallback);
+    const note = (en, bg) => escHtml(isBg ? bg : en);
+    const eqFrac = (top, bottom) => `
+      <span class="eq-frac">
+        <span class="eq-frac-top">${top}</span>
+        <span class="eq-frac-bottom">${bottom}</span>
+      </span>
+    `;
+    const eqLine = (lhs, rhs, rightNote = '') => `
+      <div class="eq-display">
+        <span class="eq-lhs">${lhs}</span>
+        <span class="eq-op">=</span>
+        <span class="eq-rhs">${rhs}</span>
+        ${rightNote ? `<span class="eq-note">${escHtml(rightNote)}</span>` : ''}
+      </div>
+    `;
+    const lawQuote = (text, cite) => `
+      <div class="law-quote">„${escHtml(text)}“<div class="law-cite">${escHtml(cite)}</div></div>
+    `;
+
     const headerHtml = `
       <div class="proof-head">
         <p><strong>${escHtml(t('proof.title', null, 'Detailed Mathematical Verification (Normative Structure)'))}</strong></p>
         <p>${escHtml(t('report.stat.generated', null, 'Generated'))}: ${escHtml(report.generatedAtDisplay)}</p>
         <p>${escHtml(t('report.stat.method', null, 'Method'))}: ${escHtml(report.methodLabel)}</p>
-        <p>${escHtml(t('report.stat.totalPeople', null, 'Total People'))}: ${Math.round(report.totalPeople)} | ${escHtml(t('report.stat.totalTime', null, 'Total Evacuation Time'))}: ${formatNumeric(report.totalTime, 3, '0.000')} min</p>
+        <p>${escHtml(t('report.stat.totalPeople', null, 'Total People'))}: ${Math.round(report.totalPeople)} | ${escHtml(t('report.stat.totalTime', null, 'Total Evacuation Time'))}: ${num(report.totalTime, 3)} min</p>
         <p>${escHtml(t('report.stat.connections', null, 'Connections'))}: ${report.rows.length} | ${escHtml(t('report.stat.bottlenecks', null, 'Bottlenecks'))}: ${report.bottleneckCount}</p>
       </div>
     `;
 
     const regulatoryHtml = `
       <h4>${escHtml(t('proof.regulatory', null, 'Regulatory Basis'))}</h4>
+      <p>${note(
+        'This mathematical proof is structured to follow the evacuation algorithm from Ordinance No. Iz-1971, Annex 8a.',
+        'Настоящата математическа обосновка е структурирана по алгоритъма от Наредба № Iз-1971, приложение № 8а.'
+      )}</p>
       <ul>
-        <li>Наредба № Iз-1971, приложение № 8а/№ 9; чл. 58, чл. 63.</li>
-        <li>Таблица 11: скорост и СПС по плътност на потока.</li>
-        <li>Таблица 12: гранични параметри за врати/отвори до 1,6 m.</li>
-        <li>Точност на модела: дължина 0,05 m; широчина 0,05 m; общо време 0,001 min.</li>
+        <li>Наредба № Iз-1971, чл. 58, чл. 63, приложение № 8а/№ 9.</li>
+        <li>Таблица 11: скорост v и специфична пропускателна способност q по плътност D.</li>
+        <li>Таблица 12: параметри за врати/отвори с широчина до 1,6 m.</li>
+        <li>${note('Model precision: L and δ rounded to 0.05 m; total time to 0.001 min.', 'Точност на модела: L и δ закръглени до 0,05 m; общо време до 0,001 min.')}</li>
       </ul>
-      <div class="law-quote">„Чл. 63. (1) ... специфичната пропускателна способност (СПС) ... и скоростта ... се приемат съгласно табл. 11.“<div class="law-cite">Наредба № Iз-1971, чл. 63, ал. 1</div></div>
-      <div class="law-quote">„За стойности на Dai над граничните се приема граничната стойност на плътността на човешкия поток.“<div class="law-cite">Приложение 8а, раздел II, т. 3</div></div>
+      ${lawQuote('Чл. 63. (1) ... специфичната пропускателна способност (СПС) ... и скоростта ... се приемат съгласно табл. 11.', 'Наредба № Iз-1971, чл. 63, ал. 1')}
+      ${lawQuote('При междинни стойности ... се приема най-близката по-висока стойност ... от табл. 11.', 'Приложение 8а, раздел II, т. 3 и раздел III, т. 2')}
     `;
 
-    const algorithmHtml = report.method === 'B'
+    const modelHtml = report.method === 'B'
       ? `
         <h4>${escHtml(t('proof.algorithm', null, 'Algorithm by Applicable Method'))}</h4>
         <p>${escHtml(t('proof.methodB.steps', null, 'Method III (specific flow capacity): compute q_i, compare with q_max, apply no-queue or queue branch, and sum all τ_i to final exit.'))}</p>
-        <div class="formula-block">${escHtml(t('proof.eq.methodB.flow', null, 'Q = q · δ'))}</div>
-        <div class="formula-block">${escHtml(t('proof.eq.methodB.q', null, 'q_i = (q_{i-1} · δ_{i-1}) / δ_i  (or merged-flow sum / δ_i)'))}</div>
-        <div class="formula-block">${escHtml(t('proof.eq.methodB.noQueue', null, 'if q_i ≤ q_max: τ_i = L_i / v_i'))}</div>
-        <div class="formula-block">${escHtml(t('proof.eq.methodB.queue', null, 'if q_i > q_max: τ_i = L_i / v_gran + N_eff · (1/Q_out - 1/Q_in)'))}</div>
-        <div class="law-quote">„След всяко получаване на текущата специфична пропускателна способност qi стойността ѝ се сравнява с максимално възможната ... (qmax) ... Възможни са два случая...“<div class="law-cite">Приложение 8а, раздел III, т. 5</div></div>
-        <div class="law-quote">„Вратите/отворите за преминаване се считат за отделни участъци... ако ... в стена с дебелина до 0,7 m ... дължината на участъка ... се приема 0.“<div class="law-cite">Приложение 8а, раздел III, т. 6</div></div>
+        <p>${note(
+          'The governing branch condition is qᵢ versus qmax. If qᵢ exceeds qmax, a congestion branch is mandatory.',
+          'Определящото условие е сравнението qᵢ спрямо qmax. При qᵢ > qmax задължително се прилага клон „със задръжка“.'
+        )}</p>
+        <p>${note(
+          'Computation is executed upstream to downstream: incoming flow is determined first, then legal capacity checks are applied, then the segment time τᵢ is resolved.',
+          'Computation is executed upstream to downstream: incoming flow is determined first, then legal capacity checks are applied, then the segment time τᵢ is resolved.'
+        )}</p>
+        <p>${note(
+          'Units are tracked explicitly in every step: q [persons/(m·min)], δ [m], Q [persons/min], v [m/min], L [m], τ [min].',
+          'Units are tracked explicitly in every step: q [persons/(m·min)], δ [m], Q [persons/min], v [m/min], L [m], τ [min].'
+        )}</p>
+        ${eqLine('Q<sub>i</sub>', 'q<sub>i</sub> · δ<sub>i</sub>', note('flow through section i', 'поток през участък i'))}
+        ${eqLine('q<sub>i</sub>', eqFrac('q<sub>i-1</sub> · δ<sub>i-1</sub>', 'δ<sub>i</sub>'), note('single incoming stream', 'един входящ поток'))}
+        ${eqLine('τ<sub>i</sub>', eqFrac('L<sub>i</sub>', 'v<sub>i</sub>'), note('if q<sub>i</sub> ≤ q<sub>max</sub>', 'ако q<sub>i</sub> ≤ q<sub>max</sub>'))}
+        ${eqLine('τ<sub>i</sub>', `${eqFrac('L<sub>i</sub>', 'v<sub>гран</sub>')} + N<sub>eff</sub> · (${eqFrac('1', 'Q<sub>out</sub>')} − ${eqFrac('1', 'Q<sub>in</sub>')})`, note('if q<sub>i</sub> > q<sub>max</sub>', 'ако q<sub>i</sub> > q<sub>max</sub>'))}
+        ${eqLine('τ<sub>ев</sub>', 'Σ τ<sub>i</sub>', note('sum to final evacuation exit', 'сума до крайния евакуационен изход'))}
       `
       : `
         <h4>${escHtml(t('proof.algorithm', null, 'Algorithm by Applicable Method'))}</h4>
         <p>${escHtml(t('proof.methodA.steps', null, 'Method II (length of route): determine D_ai, choose nearest higher D from Table 11, obtain v_i, compute τ_i=L_i/v_i, then sum by route.'))}</p>
-        <div class="formula-block">${escHtml(t('proof.eq.methodA.time', null, 'τ_i = L_i / v_i'))}</div>
-        <div class="formula-block">${escHtml(t('proof.eq.methodA.total', null, 'τ_ev = Σ τ_i'))}</div>
+        <p>${note(
+          'Method A is a deterministic kinematic model: density D_ai determines speed v_i from Table 11, then time is evaluated from segment length.',
+          'Метод A е детерминистичен кинематичен модел: плътността D_ai определя скоростта v_i по табл. 11, след което времето се намира от дължината на участъка.'
+        )}</p>
+        <p>${note(
+          'For compliance with Annex 8a, intermediate density values are treated conservatively by selecting the nearest higher tabulated class before taking vᵢ.',
+          'For compliance with Annex 8a, intermediate density values are treated conservatively by selecting the nearest higher tabulated class before taking vᵢ.'
+        )}</p>
+        ${eqLine('D<sub>ai</sub>', eqFrac('N<sub>i</sub>', 'L<sub>i</sub> · δ<sub>i</sub>'), note('segment density', 'плътност в участъка'))}
+        ${eqLine('τ<sub>i</sub>', eqFrac('L<sub>i</sub>', 'v<sub>i</sub>'), note('segment travel time', 'време за преминаване през участъка'))}
+        ${eqLine('τ<sub>ев</sub>', 'Σ τ<sub>i</sub>', note('sum to final evacuation exit', 'сума до крайния евакуационен изход'))}
       `;
 
     let segmentHtml = `<h4>${escHtml(t('proof.segmentCalc', null, 'Segment-by-Segment Calculations'))}</h4>`;
@@ -4230,35 +4381,124 @@
       segmentHtml += `<p>${escHtml(t('proof.noSegments', null, 'No modeled segments are available. Add connected nodes and rerun the report.'))}</p>`;
     } else {
       segmentHtml += report.rows.map((row) => {
-        const base = [
+        const l = Number(row.length) || 0;
+        const d = Number(row.width) || 0;
+        const n = Number(row.peopleIn) || 0;
+        const v = Number(row.speed) || 0;
+        const τ = Number(row.time) || 0;
+        const area = Math.max(0, l * d);
+        const connLabel = row.connName || getConnectionDisplayName(row.conn, { includeId: true });
+        const incomingCount = row.conn ? state.connections.filter(c => c.targetId === row.conn.sourceId).length : 0;
+        const isInitialFlow = !row.conn || incomingCount === 0 || ['start', 'start2'].includes(row.src?.typeId);
+
+        const lines = [
           `<p><strong>${escHtml(t('proof.seg.title', { step: row.step, id: row.connId, from: row.fromName, to: row.toName }, `Segment ${row.step} | Connection #${row.connId} | ${row.fromName} -> ${row.toName}`))}</strong></p>`,
-          `<p>${escHtml(t('proof.seg.geom', { length: formatNumeric(row.length, 2), width: formatNumeric(row.width, 2) }, `Geometry: L=${formatNumeric(row.length, 2)} m, δ=${formatNumeric(row.width, 2)} m`))}</p>`,
-          `<p>${escHtml(t('proof.seg.people', { people: formatNumeric(row.peopleIn, 2) }, `People basis: N=${formatNumeric(row.peopleIn, 2)}`))}</p>`,
+          `<p>${note(`Connection label: ${connLabel}`, `Connection label: ${connLabel}`)}</p>`,
+          `<p>${escHtml(t('proof.seg.geom', { length: num(l, 2), width: num(d, 2) }, `Geometry: L=${num(l, 2)} m, δ=${num(d, 2)} m`))}</p>`,
+          `<p>${escHtml(t('proof.seg.people', { people: num(n, 2, '0.00') }, `People basis: N=${num(n, 2, '0.00')}`))}</p>`,
+          `<p>${note(
+            `Normalized inputs: Lᵢ=${num(l, 2)} m, δᵢ=${num(d, 2)} m, Nᵢ=${num(n, 2)} persons, Aᵢ=Lᵢ·δᵢ.`,
+            `Normalized inputs: Lᵢ=${num(l, 2)} m, δᵢ=${num(d, 2)} m, Nᵢ=${num(n, 2)} persons, Aᵢ=Lᵢ·δᵢ.`
+          )}</p>`,
+          eqLine('A<sub>i</sub>', `L<sub>i</sub> · δ<sub>i</sub> = ${num(l, 2)} · ${num(d, 2)} = ${num(area, 3)} m²`),
         ];
+
         if (report.method === 'B') {
-          base.push(`<p>${escHtml(t('proof.seg.limit', {
-            q: formatNumeric(row.q, 2),
-            qmax: formatNumeric(row.qMax, 2),
-            qgran: formatNumeric(row.qGran, 2),
-            vgran: formatNumeric(row.vGran, 2),
-          }, `Flow limits: q=${formatNumeric(row.q, 2)}, q_max=${formatNumeric(row.qMax, 2)}, q_gran=${formatNumeric(row.qGran, 2)}, v_gran=${formatNumeric(row.vGran, 2)}`))}</p>`);
-          if (row.hasQueue || row.severity === 'blocked') {
-            const ds = row.dynamicStats || {};
-            base.push(`<div class="formula-block">τ_i = L_i / v_гран + N_eff · (1/Q_out - 1/Q_in)</div>`);
-            base.push(`<p>N_total=${formatNumeric(ds.N_total, 2, '0.00')}, N_eff=${formatNumeric(ds.N_eff, 2, '0.00')}, t_fill=${formatNumeric(ds.t_filling, 4, '0.0000')} min</p>`);
+          const flow = row.conn && row.conn.flowState ? row.conn.flowState : {};
+          const QIn = Number(flow.Q_in) || 0;
+          const QOut = Number(flow.Q_out) || 0;
+          const qi = Number(row.q) || 0;
+          const qMax = Number(row.qMax) || 0;
+          const qGran = Number(row.qGran) || 0;
+          const vGran = Number(row.vGran) || 0;
+          const ds = row.dynamicStats || {};
+          const nEff = Number(ds.N_eff);
+          const nEffSafe = Number.isFinite(nEff) ? nEff : n;
+          const outConns = row.conn ? state.connections.filter(c => c.sourceId === row.conn.sourceId) : [];
+          const totalOutWidth = outConns.reduce((sum, c) => sum + Math.max(0.05, Number(c.width) || 1.2), 0);
+          const splitRatio = totalOutWidth > 0 ? d / totalOutWidth : 1;
+
+          lines.push(eqLine('q<sub>i</sub>', `${num(qi, 3)} чов./m·min`, note('computed specific flow', 'изчислена СПС')));
+          lines.push(eqLine('q<sub>max</sub>', `${num(qMax, 3)} чов./m·min`, note('limit from Table 11 / law', 'предел по табл. 11 / закон')));
+          lines.push(`<p>${note(
+            isInitialFlow
+              ? 'This is an initial segment: flow is initialized from the source node population and geometric section data.'
+              : `This is a downstream segment: incoming flow from ${incomingCount} upstream segment(s) is propagated into this branch.`,
+            isInitialFlow
+              ? 'This is an initial segment: flow is initialized from the source node population and geometric section data.'
+              : `This is a downstream segment: incoming flow from ${incomingCount} upstream segment(s) is propagated into this branch.`
+          )}</p>`);
+          if (!isInitialFlow) {
+            lines.push(eqLine('r<sub>i</sub>', `${num(d, 3)} / ${num(totalOutWidth, 3)} = ${num(splitRatio, 3)}`, note('branch split ratio by relative width', 'коефициент за разпределение по относителна широчина')));
+          }
+          lines.push(eqLine('Q<sub>i</sub>', `${num(qi, 3)} · ${num(d, 3)} = ${num(qi * d, 3)} чов./min`, note('resulting volumetric flow for this segment', 'обемен поток за участъка')));
+          lines.push(`<p>${note(
+            qi > qMax
+              ? `Since q_i (${num(qi, 3)}) > q_max (${num(qMax, 3)}), the congestion branch is applied.`
+              : `Since q_i (${num(qi, 3)}) ≤ q_max (${num(qMax, 3)}), free-flow branch is applied.`,
+            qi > qMax
+              ? `Тъй като q_i (${num(qi, 3)}) > q_max (${num(qMax, 3)}), прилага се клон „със задръжка“.`
+              : `Тъй като q_i (${num(qi, 3)}) ≤ q_max (${num(qMax, 3)}), прилага се клон „без задръжка“.`
+          )}</p>`);
+
+          if (qi > qMax || row.hasQueue || row.severity === 'blocked') {
+            const travelTerm = vGran > 0 ? (l / vGran) : 0;
+            const delayTerm = (QOut > 0 && QIn > 0) ? nEffSafe * Math.max(0, (1 / QOut) - (1 / QIn)) : 0;
+            lines.push(`<p>${note(
+              'Queue branch decomposition: first term is constrained travel at v_gran, second term is queue discharge delay due to finite outlet capacity.',
+              'Queue branch decomposition: first term is constrained travel at v_gran, second term is queue discharge delay due to finite outlet capacity.'
+            )}</p>`);
+            lines.push(eqLine('v<sub>гран</sub>', `${num(vGran, 3)} m/min`));
+            lines.push(eqLine('q<sub>гран</sub>', `${num(qGran, 3)} чов./m·min`));
+            lines.push(eqLine('Q<sub>in</sub>', `${num(QIn, 3)} чов./min`));
+            lines.push(eqLine('Q<sub>out</sub>', `${num(QOut, 3)} чов./min`));
+            lines.push(eqLine('N<sub>eff</sub>', `${num(nEffSafe, 3)} чов.`));
+            lines.push(eqLine(
+              'τ<sub>i</sub>',
+              `${eqFrac(`${num(l, 3)}`, `${num(vGran, 3)}`)} + ${num(nEffSafe, 3)} · (${eqFrac('1', `${num(QOut, 3)}`)} − ${eqFrac('1', `${num(QIn, 3)}`)})`
+            ));
+            lines.push(eqLine('τ<sub>i</sub>', `${num(travelTerm, 4)} + ${num(delayTerm, 4)} = ${num(τ, 4)} min`));
           } else {
-            base.push('<div class="formula-block">τ_i = L_i / v_i</div>');
+            lines.push(`<p>${note(
+              'Free-flow branch: no queue term is added; travel time is purely geometric (distance over speed).',
+              'Free-flow branch: no queue term is added; travel time is purely geometric (distance over speed).'
+            )}</p>`);
+            lines.push(eqLine('τ<sub>i</sub>', `${eqFrac(`${num(l, 3)}`, `${num(v, 3)}`)} = ${num(τ, 4)} min`));
           }
         } else {
-          base.push(`<div class="formula-block">τ_i = L_i / v_i</div>`);
+          const density = Number(row.density) || 0;
+          lines.push(eqLine(
+            'D<sub>ai</sub>',
+            `${eqFrac(`${num(n, 3)}`, `${num(l, 3)} · ${num(d, 3)}`)} = ${num(density, 3)} чов./m²`
+          ));
+          lines.push(`<p>${note(
+            'Table 11 lookup is then applied using conservative upward class selection for intermediate density values.',
+            'Table 11 lookup is then applied using conservative upward class selection for intermediate density values.'
+          )}</p>`);
+          lines.push(eqLine('v<sub>i</sub>', `${num(v, 3)} m/min`, note('from Table 11 at adopted D_ai', 'по табл. 11 при приетата D_ai')));
+          lines.push(eqLine('τ<sub>i</sub>', `${eqFrac(`${num(l, 3)}`, `${num(v, 3)}`)} = ${num(τ, 4)} min`));
+          lines.push(`<p>${note(
+            'Dimensional check: [m] / [m/min] = [min], which validates τᵢ units.',
+            'Dimensional check: [m] / [m/min] = [min], which validates τᵢ units.'
+          )}</p>`);
         }
+
         if (row.lengthMismatch) {
-          base.push(`<div class="proof-warn">${escHtml(t('report.table.lengthWarningValue', { specified: formatNumeric(row.specifiedLength, 2), actual: formatNumeric(row.length, 2) }, `Specified ${formatNumeric(row.specifiedLength, 2)} m, using ${formatNumeric(row.length, 2)} m`))}</div>`);
+          lines.push(`<div class="proof-warn">${escHtml(t(
+            'report.table.lengthWarningValue',
+            { specified: num(row.specifiedLength, 2), actual: num(row.length, 2) },
+            `Specified ${num(row.specifiedLength, 2)} m, using ${num(row.length, 2)} m`
+          ))}</div>`);
         }
-        base.push(`<p>${escHtml(t('proof.seg.result', { time: formatNumeric(row.time, 4), status: row.severityLabel }, `Result: τ=${formatNumeric(row.time, 4)} min, status=${row.severityLabel}`))}</p>`);
-        return `<div class="segment-block">${base.join('')}</div>`;
+        lines.push(`<p>${escHtml(t('proof.seg.result', { time: num(τ, 4), status: row.severityLabel }, `Result: τ=${num(τ, 4)} min, status=${row.severityLabel}`))}</p>`);
+        return `<div class="segment-block">${lines.join('')}</div>`;
       }).join('');
     }
+
+    const exits = state.nodes.filter(n => n.typeId === 'exit');
+    const exitHtml = exits.length > 0
+      ? `<ul>${exits.map((e) => `<li>${escHtml(e.name || `${t('table.nodes.id', null, 'ID')} ${e.id}`)}: τ = ${num(e.maxTime, 4)} min</li>`).join('')}</ul>`
+      : `<p>${note('No explicit exit node is defined. The maximum reachable node time is used.', 'Няма дефиниран изходен възел. Използва се максималното достижимо време по възли.')}</p>`;
 
     const resultRiskLine = report.bottleneckCount > 0
       ? t(
@@ -4267,22 +4507,37 @@
         `${report.bottleneckCount} bottleneck segments were found (${report.blockedCount} blocked, ${report.queueCount} with queues).`
       )
       : t('report.summary.riskNone', null, 'No bottlenecks or blocked segments were detected.');
+    const sumTerms = report.rows
+      .map(r => num(r.time, 4))
+      .slice(0, 10)
+      .join(' + ');
+    const sumExpression = report.rows.length > 10
+      ? `${sumTerms} + ... (${report.rows.length} terms)`
+      : (sumTerms || '0');
 
     const resultHtml = `
       <h4>${escHtml(t('proof.result', null, 'Final Result and Compliance Notes'))}</h4>
-      <p><strong>${escHtml(t('proof.total', { time: formatNumeric(report.totalTime, 3, '0.000') }, `Final evacuation time: ${formatNumeric(report.totalTime, 3, '0.000')} min`))}</strong></p>
+      <p>${note(
+        'The final evacuation time equals the algebraic sum of segment travel times along the governing route to final evacuation exit.',
+        'Крайното време за евакуация е алгебрична сума от времената за всички участъци по определящия маршрут до крайния евакуационен изход.'
+      )}</p>
+      ${eqLine('τ<sub>ев</sub>', `Σ τ<sub>i</sub> = ${num(report.totalTime, 3)} min`)}
+      ${eqLine('τ<sub>ев</sub>', `${sumExpression} = ${num(report.totalTime, 3)} min`, note('explicit summation of computed segment times', 'явна сума на изчислените времена по участъци'))}
+      ${exitHtml}
       ${report.lengthMismatchCount > 0 ? `<div class="proof-warn">${escHtml(t('proof.lengthWarnings', { count: report.lengthMismatchCount }, `Length warning: ${report.lengthMismatchCount} connections use geometric length different from the specified user value.`))}</div>` : ''}
       <p>${escHtml(resultRiskLine)}</p>
     `;
 
     const citationsHtml = `
       <h4>${escHtml(t('proof.citations', null, 'Quoted Bulgarian Legal Text (reference excerpts)'))}</h4>
-      <div class="law-quote">„... за хоризонтални участъци максимално възможната стойност на специфичната пропускателна способност е 164,2 чов./m.min, за врати ... 199,1 чов./m.min ...“<div class="law-cite">Приложение 8а, раздел III, т. 5</div></div>
-      <div class="law-quote">„... за хоризонтални участъци граничната специфична пропускателна способност е 135 чов./m.min, за движение по стълбище надолу ... 60,4 чов./m.min ...“<div class="law-cite">Приложение 8а, раздел III, т. 5, буква „б“</div></div>
-      <div class="law-quote">„Максималната стойност на СПС за врати/отвори е 199,1 чов./m.min.“<div class="law-cite">Чл. 63, ал. 5 и табл. 12</div></div>
+      ${lawQuote('След всяко получаване на текущата специфична пропускателна способност qi стойността ѝ се сравнява с максимално възможната за дадения вид път (qmax)...', 'Приложение 8а, раздел III, т. 5')}
+      ${lawQuote('... за хоризонтални участъци максимално възможната стойност ... е 164,2 чов./m.min, за врати ... 199,1 чов./m.min ...', 'Приложение 8а, раздел III, т. 5; чл. 63, ал. 5')}
+      ${lawQuote('Когато ... q_i е по-голяма от qmax ... движението ще се извършва при гранична плътност ... с параметри vгран и qгран.', 'Приложение 8а, раздел III, т. 5, буква „б“')}
+      ${lawQuote('Вратите/отворите ... се считат за отделни участъци ... при стена с дебелина до 0,7 m ... дължината ... се приема 0.', 'Приложение 8а, раздел III, т. 6')}
+      ${lawQuote('Изчислителното време за евакуация ... е сумата от времената ... през всички участъци (без и със задръжки).', 'Приложение 8а, раздел III, т. 7')}
     `;
 
-    mathProofContent.innerHTML = [headerHtml, regulatoryHtml, algorithmHtml, segmentHtml, resultHtml, citationsHtml].join('');
+    mathProofContent.innerHTML = [headerHtml, regulatoryHtml, modelHtml, segmentHtml, resultHtml, citationsHtml].join('');
   }
 
   function exportReportPdf() {
@@ -4379,6 +4634,14 @@
     .proof { border: 1px solid #d1d5db; border-radius: 6px; padding: 10px; font-size: 10.5px; line-height: 1.45; word-break: break-word; }
     .proof h4 { margin: 10px 0 6px; font-size: 12px; }
     .proof .formula-block { margin: 6px 0; border: 1px solid #d1d5db; border-left: 3px solid #2563eb; border-radius: 4px; padding: 6px 8px; font-family: Consolas, "Courier New", monospace; font-size: 10px; background: #f8fafc; }
+    .proof .eq-display { display: grid; grid-template-columns: max-content max-content 1fr max-content; align-items: center; gap: 8px; margin: 6px 0; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; background: #f8fafc; font-family: "Cambria Math","Times New Roman",serif; font-size: 14px; }
+    .proof .eq-lhs { font-style: italic; color: #111827; }
+    .proof .eq-op { color: #334155; font-weight: 600; }
+    .proof .eq-rhs { color: #0f172a; }
+    .proof .eq-note { font-family: "Segoe UI", Arial, sans-serif; font-size: 9.5px; color: #2563eb; }
+    .proof .eq-frac { display: inline-flex; flex-direction: column; align-items: stretch; line-height: 1.05; vertical-align: middle; margin: 0 2px; }
+    .proof .eq-frac-top { border-bottom: 1px solid #334155; padding: 0 3px 1px; text-align: center; }
+    .proof .eq-frac-bottom { padding: 1px 3px 0; text-align: center; }
     .proof .segment-block { margin: 8px 0; border: 1px solid #e5e7eb; border-radius: 4px; padding: 7px; background: #ffffff; }
     .proof .law-quote { margin: 6px 0; border-left: 3px solid #d97706; background: #fff7ed; border-radius: 4px; padding: 7px; }
     .proof .law-cite { margin-top: 3px; font-size: 9.5px; color: #7c2d12; }
@@ -4620,6 +4883,14 @@
       const section = document.createElement('div');
       section.className = 'prop-section';
       section.innerHTML = `<h4>${escHtml(t('props.connectionProperties', { count: selConns.length }, `Connection Properties (${selConns.length})`))}</h4>`;
+
+      const commonConnName = getCommonValue(selConns, c => (typeof c.name === 'string' ? c.name : ''));
+      section.appendChild(createPropInput(t('props.name', null, 'Name'), 'text', commonConnName, (val) => {
+        const nextName = String(val || '').trim();
+        selConns.forEach(c => c.name = nextName);
+        commitHistory();
+        render();
+      }));
 
       // Type
       const commonTypeId = getCommonValue(selConns, c => c.typeId);

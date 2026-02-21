@@ -846,6 +846,60 @@ body {
   font-size: 11.5px;
 }
 
+.math-content .eq-display {
+  display: grid;
+  grid-template-columns: max-content max-content 1fr max-content;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.32);
+  font-family: "Cambria Math", "Times New Roman", serif;
+  font-size: 16px;
+}
+
+.math-content .eq-lhs {
+  font-style: italic;
+  color: #f8fafc;
+}
+
+.math-content .eq-op {
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+.math-content .eq-rhs {
+  color: #e2e8f0;
+}
+
+.math-content .eq-note {
+  font-family: var(--font);
+  font-size: 10.5px;
+  color: #93c5fd;
+}
+
+.math-content .eq-frac {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  line-height: 1.05;
+  vertical-align: middle;
+  margin: 0 2px;
+}
+
+.math-content .eq-frac-top {
+  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
+  padding: 0 3px 1px;
+  text-align: center;
+}
+
+.math-content .eq-frac-bottom {
+  padding: 1px 3px 0;
+  text-align: center;
+}
+
 .math-content .segment-block {
   margin: 10px 0;
   padding: 10px;
