@@ -637,46 +637,6 @@
     state.totalEvacuationTime = Number(engine.state.totalEvacuationTime) || 0;
   }
 
-  function getSegmentParams(conn) {
-    const engine = syncCalcEngineState();
-    return engine ? engine.getSegmentParams(conn) : null;
-  }
-
-  function lookupTable11(segType, density) {
-    const engine = syncCalcEngineState();
-    return engine ? engine.lookupTable11(segType, density) : { v: 0, q: 0 };
-  }
-
-  function getLimitParams(typeId) {
-    const engine = syncCalcEngineState();
-    return engine ? engine.getLimitParams(typeId) : { q_max: 164, q_gran: 135, v_gran: 14 };
-  }
-
-  function sortConnectionsTopologically() {
-    const engine = syncCalcEngineState();
-    return engine ? engine.sortConnectionsTopologically() : [];
-  }
-
-  function propagateMaxTime() {
-    const engine = syncCalcEngineState();
-    if (!engine) return;
-    engine.propagateMaxTime();
-    applyCalcEngineState(engine);
-  }
-
-  function calcMethodA() {
-    const engine = syncCalcEngineState();
-    if (!engine) return;
-    engine.calcMethodA();
-    applyCalcEngineState(engine);
-  }
-
-  function calcMethodB() {
-    const engine = syncCalcEngineState();
-    if (!engine) return;
-    engine.calcMethodB();
-    applyCalcEngineState(engine);
-  }
 
   function recalcFireSafety() {
     if (!state.regulations) return;
@@ -3904,371 +3864,96 @@
       mathProofContent.textContent = t('alert.noReportData', null, 'No report data available.');
       return;
     }
-    const isBg = currentLanguage === 'bg';
-    const num = (value, digits = 3, fallback = '0.000') => formatNumeric(value, digits, fallback);
-    const note = (en, bg) => escHtml(isBg ? bg : en);
-    const eqFrac = (top, bottom) => `
-      <span class="eq-frac">
-        <span class="eq-frac-top">${top}</span>
-        <span class="eq-frac-bottom">${bottom}</span>
-      </span>
-    `;
-    const eqLine = (lhs, rhs, rightNote = '') => `
-      <div class="eq-display">
-        <span class="eq-lhs">${lhs}</span>
-        <span class="eq-op">=</span>
-        <span class="eq-rhs">${rhs}</span>
-        ${rightNote ? `<span class="eq-note">${escHtml(rightNote)}</span>` : ''}
-      </div>
-    `;
-    const lawQuote = (text, cite) => `
-      <div class="law-quote">„${escHtml(text)}“<div class="law-cite">${escHtml(cite)}</div></div>
-    `;
 
-    const headerHtml = `
-      <div class="proof-head">
-        <p><strong>${escHtml(t('proof.title', null, 'Detailed Mathematical Verification (Normative Structure)'))}</strong></p>
-        <p>${escHtml(t('report.stat.generated', null, 'Generated'))}: ${escHtml(report.generatedAtDisplay)}</p>
-        <p>${escHtml(t('report.stat.method', null, 'Method'))}: ${escHtml(report.methodLabel)}</p>
-        <p>${escHtml(t('report.stat.totalPeople', null, 'Total People'))}: ${Math.round(report.totalPeople)} | ${escHtml(t('report.stat.totalTime', null, 'Total Evacuation Time'))}: ${num(report.totalTime, 3)} min</p>
-        <p>${escHtml(t('report.stat.connections', null, 'Connections'))}: ${report.rows.length} | ${escHtml(t('report.stat.bottlenecks', null, 'Bottlenecks'))}: ${report.bottleneckCount}</p>
-      </div>
-    `;
-
-    const regulatoryHtml = `
-      <h4>${escHtml(t('proof.regulatory', null, 'Regulatory Basis'))}</h4>
-      <p>${note(
-        'This mathematical proof is structured to follow the evacuation algorithm from Ordinance No. Iz-1971, Annex 8a.',
-        'Настоящата математическа обосновка е структурирана по алгоритъма от Наредба № Iз-1971, приложение № 8а.'
-      )}</p>
-      <ul>
-        <li>Наредба № Iз-1971, чл. 58, чл. 63, приложение № 8а/№ 9.</li>
-        <li>Таблица 11: скорост v и специфична пропускателна способност q по плътност D.</li>
-        <li>Таблица 12: параметри за врати/отвори с широчина до 1,6 m.</li>
-        <li>Приложение № 8а, раздел I, т. 11: при плътност не се отчитат хората, напуснали участъка до неговото запълване (логика за N<sub>eff</sub>).</li>
-        <li>${note('Model precision: L and δ rounded to 0.05 m; total time to 0.001 min.', 'Точност на модела: L и δ закръглени до 0,05 m; общо време до 0,001 min.')}</li>
-      </ul>
-      ${lawQuote('Чл. 63. (1) ... специфичната пропускателна способност (СПС) ... и скоростта ... се приемат съгласно табл. 11.', 'Наредба № Iз-1971, чл. 63, ал. 1')}
-      ${lawQuote('При междинни стойности ... се приема най-близката по-висока стойност ... от табл. 11.', 'Приложение 8а, раздел II, т. 3 и раздел III, т. 2')}
-    `;
-
-    const modelHtml = report.method === 'B'
-      ? `
-        <h4>${escHtml(t('proof.algorithm', null, 'Algorithm by Applicable Method'))}</h4>
-        <p>${escHtml(t('proof.methodB.steps', null, 'Method III (specific flow capacity): compute q_i, compare with q_max, apply no-queue or queue branch, and sum all τ_i to final exit.'))}</p>
-        <p>${note(
-          'The governing branch condition is qᵢ versus qmax. If qᵢ exceeds qmax, a congestion branch is mandatory.',
-          'Определящото условие е сравнението qᵢ спрямо qmax. При qᵢ > qmax задължително се прилага клон „със задръжка“.'
-        )}</p>
-        <p>${note(
-          'Computation is executed upstream-to-downstream: incoming flow is resolved first, legal capacity checks are then applied, and finally τᵢ is calculated.',
-          'Изчислението се изпълнява от горните към долните участъци: първо се определя входящият поток, после се правят нормативните проверки за пропускателна способност и накрая се намира τᵢ.'
-        )}</p>
-        <p>${note(
-          'Units are tracked explicitly: q [persons/(m·min)], δ [m], Q [persons/min], v [m/min], L [m], τ [min], N [persons].',
-          'Единиците се следят явно: q [чов./(m·min)], δ [m], Q [чов./min], v [m/min], L [m], τ [min], N [чов.].'
-        )}</p>
-        ${eqLine('Q<sub>i</sub>', 'q<sub>i</sub> · δ<sub>i</sub>', note('flow through section i', 'поток през участък i'))}
-        ${eqLine('q<sub>i</sub>', eqFrac('q<sub>i-1</sub> · δ<sub>i-1</sub>', 'δ<sub>i</sub>'), note('single incoming stream', 'един входящ поток'))}
-        ${eqLine('D<sub>ai</sub>', eqFrac('N<sub>i,max</sub>', 'A<sub>i</sub>'), note('A_i = l_i · δ_i', 'A_i = l_i · δ_i'))}
-        ${eqLine('t<sub>fill</sub>', eqFrac('L<sub>i</sub>', 'v(D<sub>ai</sub>)'), note('fill time used for Ni correction by item I.11', 'време за запълване за корекция на Ni по т. I.11'))}
-        ${eqLine('N<sub>out</sub>', 'min(N<sub>i,max</sub>, Q<sub>out</sub> · t<sub>fill</sub>)', note('people who leave before full section occupation', 'хора, напуснали преди пълно запълване на участъка'))}
-        ${eqLine('N<sub>i,eff</sub>', 'max(0, N<sub>i,max</sub> − N<sub>out</sub>)', note('effective Ni for delay term under Annex 8a, I.11', 'ефективно Ni за члена със задръжка по прил. 8а, т. I.11'))}
-        ${eqLine('τ<sub>i</sub>', eqFrac('L<sub>i</sub>', 'v<sub>i</sub>'), note('if qi <= qmax', 'ако qi <= qmax'))}
-        ${eqLine('τ<sub>i</sub>', `${eqFrac('L<sub>i</sub>', 'v<sub>гран</sub>')} + N<sub>i,eff</sub> · (${eqFrac('1', 'Q<sub>out</sub>')} − ${eqFrac('1', 'Q<sub>in</sub>')})`, note('if qi > qmax', 'ако qi > qmax'))}
-        ${eqLine('Q<sub>out</sub>', 'q<sub>гран</sub> · δ<sub>i</sub>', note('Annex 8a, III.5(b)', 'прил. 8а, III.5, б. „б“'))}
-        ${eqLine('Q<sub>in</sub>', 'Σ(δ<sub>i-1</sub> · q<sub>i-1</sub>)', note('incoming capacity term in Annex 8a formula', 'входящ член от формулата по прил. 8а'))}
-        ${eqLine('τ<sub>ев</sub>', 'Σ τ<sub>i</sub>', note('sum to final evacuation exit', 'сума до крайния евакуационен изход'))}
-      `
-      : `
-        <h4>${escHtml(t('proof.algorithm', null, 'Algorithm by Applicable Method'))}</h4>
-        <p>${escHtml(t('proof.methodA.steps', null, 'Method II (length of route): determine D_ai, choose nearest higher D from Table 11, obtain v_i, compute τ_i=L_i/v_i, then sum by route.'))}</p>
-        <p>${note(
-          'Method A is a deterministic kinematic model: density D_ai determines speed v_i from Table 11, then time is evaluated from segment length.',
-          'Метод A е детерминистичен кинематичен модел: плътността D_ai определя скоростта v_i по табл. 11, след което времето се намира от дължината на участъка.'
-        )}</p>
-        <p>${note(
-          'For compliance with Annex 8a, intermediate density values are treated conservatively by selecting the nearest higher tabulated class before taking vᵢ.',
-          'For compliance with Annex 8a, intermediate density values are treated conservatively by selecting the nearest higher tabulated class before taking vᵢ.'
-        )}</p>
-        ${eqLine('D<sub>ai</sub>', eqFrac('N<sub>i</sub>', 'L<sub>i</sub> · δ<sub>i</sub>'), note('segment density', 'плътност в участъка'))}
-        ${eqLine('τ<sub>i</sub>', eqFrac('L<sub>i</sub>', 'v<sub>i</sub>'), note('segment travel time', 'време за преминаване през участъка'))}
-        ${eqLine('τ<sub>ев</sub>', 'Σ τ<sub>i</sub>', note('sum to final evacuation exit', 'сума до крайния евакуационен изход'))}
-      `;
-
-    let segmentHtml = `<h4>${escHtml(t('proof.segmentCalc', null, 'Segment-by-Segment Calculations'))}</h4>`;
-    if (!report.rows.length) {
-      segmentHtml += `<p>${escHtml(t('proof.noSegments', null, 'No modeled segments are available. Add connected nodes and rerun the report.'))}</p>`;
-    } else {
-      segmentHtml += report.rows.map((row) => {
-        const l = Number(row.length) || 0;
-        const d = Number(row.width) || 0;
-        const n = Number(row.peopleIn) || 0;
-        const v = Number(row.speed) || 0;
-        const τ = Number(row.time) || 0;
-        const area = Math.max(0, l * d);
-        const connLabel = row.connName || getConnectionDisplayName(row.conn, { includeId: true });
-        const incomingCount = row.conn ? state.connections.filter(c => c.targetId === row.conn.sourceId).length : 0;
-        const isInitialFlow = !row.conn || incomingCount === 0 || ['start', 'start2'].includes(row.src?.typeId);
-
-        const lines = [
-          `<p><strong>${escHtml(t('proof.seg.title', { step: row.step, id: row.connId, from: row.fromName, to: row.toName }, `Segment ${row.step} | Connection #${row.connId} | ${row.fromName} -> ${row.toName}`))}</strong></p>`,
-          `<p>${note(`Connection label: ${connLabel}`, `Connection label: ${connLabel}`)}</p>`,
-          `<p>${escHtml(t('proof.seg.geom', { length: num(l, 2), width: num(d, 2) }, `Geometry: L=${num(l, 2)} m, δ=${num(d, 2)} m`))}</p>`,
-          `<p>${escHtml(t('proof.seg.people', { people: num(n, 2, '0.00') }, `People basis: N=${num(n, 2, '0.00')}`))}</p>`,
-          `<p>${note(
-            `Normalized inputs: Lᵢ=${num(l, 2)} m, δᵢ=${num(d, 2)} m, Nᵢ=${num(n, 2)} persons, Aᵢ=Lᵢ·δᵢ.`,
-            `Normalized inputs: Lᵢ=${num(l, 2)} m, δᵢ=${num(d, 2)} m, Nᵢ=${num(n, 2)} persons, Aᵢ=Lᵢ·δᵢ.`
-          )}</p>`,
-          eqLine('A<sub>i</sub>', `L<sub>i</sub> · δ<sub>i</sub> = ${num(l, 2)} · ${num(d, 2)} = ${num(area, 3)} m²`),
-        ];
-
-        if (report.method === 'B') {
-          const flow = row.conn && row.conn.flowState ? row.conn.flowState : {};
-          const QIn = Number(flow.Q_in) || 0;
-          const QOut = Number(flow.Q_out) || 0;
-          const qi = Number(row.q) || 0;
-          const qMax = Number(row.qMax) || 0;
-          const qGran = Number(row.qGran) || 0;
-          const vGran = Number(row.vGran) || 0;
-          const ds = row.dynamicStats || {};
-          const nTotal = Number.isFinite(Number(ds.N_total)) ? Number(ds.N_total) : n;
-          const vDensity = Number.isFinite(Number(ds.v_density)) ? Number(ds.v_density) : v;
-          const densityEff = Number.isFinite(Number(ds.density))
-            ? Number(ds.density)
-            : (area > 0 ? (nTotal / area) : 0);
-          const densityLine = area > 0
-            ? `${eqFrac(`${num(nTotal, 3)}`, `${num(area, 3)}`)} = ${num(densityEff, 3)} чов./m²`
-            : `${num(densityEff, 3)} чов./m²`;
-          const tFill = Number.isFinite(Number(ds.t_filling))
-            ? Number(ds.t_filling)
-            : (vDensity > 0 ? (l / vDensity) : 0);
-          const nOut = Number.isFinite(Number(ds.N_out))
-            ? Number(ds.N_out)
-            : Math.max(0, Math.min(nTotal, QOut * tFill));
-          const nEff = Number.isFinite(Number(ds.N_eff))
-            ? Number(ds.N_eff)
-            : Math.max(0, nTotal - nOut);
-          const travelTerm = Number.isFinite(Number(ds.travelTerm))
-            ? Number(ds.travelTerm)
-            : (vGran > 0 ? (l / vGran) : 0);
-          const delayKernel = Number.isFinite(Number(ds.delayKernel))
-            ? Number(ds.delayKernel)
-            : (
-              (QOut > 0 && QIn > 0)
-                ? Math.max(0, (1 / QOut) - (1 / QIn))
-                : (QOut > 0 ? (1 / QOut) : 0)
-            );
-          const delayTerm = Number.isFinite(Number(ds.delayTerm))
-            ? Number(ds.delayTerm)
-            : (nEff * delayKernel);
-          const capacityDeficit = QIn - QOut;
-          const outConns = row.conn ? state.connections.filter(c => c.sourceId === row.conn.sourceId) : [];
-          const totalOutWidth = outConns.reduce((sum, c) => sum + Math.max(0.05, Number(c.width) || 1.2), 0);
-          const splitRatio = totalOutWidth > 0 ? d / totalOutWidth : 1;
-
-          lines.push(eqLine('q<sub>i</sub>', `${num(qi, 3)} чов./m·min`, note('computed specific flow', 'изчислена СПС')));
-          lines.push(eqLine('q<sub>max</sub>', `${num(qMax, 3)} чов./m·min`, note('limit from Table 11 / law', 'предел по табл. 11 / закон')));
-          lines.push(`<p>${note(
-            isInitialFlow
-              ? 'This is an initial segment: flow is initialized from the source node population and geometric section data.'
-              : `This is a downstream segment: incoming flow from ${incomingCount} upstream segment(s) is propagated into this branch.`,
-            isInitialFlow
-              ? 'This is an initial segment: flow is initialized from the source node population and geometric section data.'
-              : `This is a downstream segment: incoming flow from ${incomingCount} upstream segment(s) is propagated into this branch.`
-          )}</p>`);
-          if (!isInitialFlow) {
-            lines.push(eqLine('r<sub>i</sub>', `${num(d, 3)} / ${num(totalOutWidth, 3)} = ${num(splitRatio, 3)}`, note('branch split ratio by relative width', 'коефициент за разпределение по относителна широчина')));
-          }
-          lines.push(eqLine('Q<sub>i</sub>', `${num(qi, 3)} · ${num(d, 3)} = ${num(qi * d, 3)} чов./min`, note('resulting volumetric flow for this segment', 'обемен поток за участъка')));
-          lines.push(`<p>${note(
-            qi > qMax
-              ? `Since q_i (${num(qi, 3)}) > q_max (${num(qMax, 3)}), the congestion branch is applied.`
-              : `Since q_i (${num(qi, 3)}) ≤ q_max (${num(qMax, 3)}), free-flow branch is applied.`,
-            qi > qMax
-              ? `Тъй като q_i (${num(qi, 3)}) > q_max (${num(qMax, 3)}), прилага се клон „със задръжка“.`
-              : `Тъй като q_i (${num(qi, 3)}) ≤ q_max (${num(qMax, 3)}), прилага се клон „без задръжка“.`
-          )}</p>`);
-
-          if (qi > qMax || row.hasQueue || row.severity === 'blocked') {
-            lines.push(`<p>${note(
-              'Queue branch is applied under Annex 8a, Section III, item 5(b): q_i exceeds q_max, therefore movement is constrained by boundary parameters.',
-              'Прилага се клон „със задръжка“ по приложение № 8а, раздел III, т. 5, буква „б“: q_i превишава q_max и движението се ограничава от граничните параметри.'
-            )}</p>`);
-            lines.push(eqLine('v<sub>гран</sub>', `${num(vGran, 3)} m/min`));
-            lines.push(eqLine('q<sub>гран</sub>', `${num(qGran, 3)} чов./m·min`));
-            lines.push(eqLine('Q<sub>in</sub>', `${num(QIn, 3)} чов./min`));
-            lines.push(eqLine('Q<sub>out</sub>', `${num(QOut, 3)} чов./min`));
-            lines.push(eqLine('ΔQ', `${num(QIn, 3)} − ${num(QOut, 3)} = ${num(capacityDeficit, 3)} чов./min`, note('positive value indicates bottleneck loading', 'положителна стойност показва натоварване на тясно място')));
-            lines.push(`<p>${note(
-              'By Annex 8a, Section I, item 11, N_i for delay is corrected by excluding people discharged before full segment occupation.',
-              'Съгласно приложение № 8а, раздел I, т. 11, Ni за члена със задръжка се коригира, като се изключат хората, напуснали участъка преди пълното му запълване.'
-            )}</p>`);
-            lines.push(eqLine('D<sub>ai</sub>', densityLine, note('density class for v(D_ai) lookup from Table 11', 'клас на плътност за v(D_ai) по табл. 11')));
-            lines.push(eqLine('v(D<sub>ai</sub>)', `${num(vDensity, 3)} m/min`));
-            lines.push(eqLine('t<sub>fill</sub>', `${eqFrac(`${num(l, 3)}`, `${num(vDensity, 3)}`)} = ${num(tFill, 4)} min`));
-            lines.push(eqLine('N<sub>i,max</sub>', `${num(nTotal, 3)} чов.`, note('maximum people in the segment from model stream assignment', 'максимален брой хора в участъка от потоковото разпределение в модела')));
-            lines.push(eqLine('N<sub>out</sub>', `min(${num(nTotal, 3)}, ${num(QOut, 3)} · ${num(tFill, 4)}) = ${num(nOut, 3)} чов.`));
-            lines.push(eqLine('N<sub>i,eff</sub>', `max(0, ${num(nTotal, 3)} − ${num(nOut, 3)}) = ${num(nEff, 3)} чов.`));
-            lines.push(eqLine('k<sub>queue</sub>', `${eqFrac('1', `${num(QOut, 3)}`)} − ${eqFrac('1', `${num(QIn, 3)}`)} = ${num(delayKernel, 6)} min/чов.`));
-            lines.push(eqLine('τ<sub>i</sub> (Annex 8a)', `${eqFrac('L<sub>i</sub>', 'v<sub>гран</sub>')} + N<sub>i,eff</sub> · [${eqFrac('1', 'q<sub>гран</sub> · δ<sub>i</sub>')} − ${eqFrac('1', 'Σ(δ<sub>i-1</sub>·q<sub>i-1</sub>)')}]`, note('normative form from Annex 8a, III.5(b)', 'нормативен вид по прил. 8а, III.5, б. „б“')));
-            lines.push(eqLine(
-              'τ<sub>i</sub> (equivalent)',
-              `${eqFrac(`${num(l, 3)}`, `${num(vGran, 3)}`)} + ${num(nEff, 3)} · (${eqFrac('1', `${num(QOut, 3)}`)} − ${eqFrac('1', `${num(QIn, 3)}`)})`,
-              note('using Q_out = q_gran·δ_i and Q_in = Σ(δ_(i-1)·q_(i-1))', 'с еквивалентностите Q_out = q_гран·δ_i и Q_in = Σ(δ_(i-1)·q_(i-1))')
-            ));
-            lines.push(eqLine('τ<sub>i</sub>', `${num(travelTerm, 4)} + ${num(delayTerm, 4)} = ${num(τ, 4)} min`));
-            lines.push(`<p>${note(
-              'Dimensional check: N_i,eff [persons] × k_queue [min/person] = [min]; this term is added to L_i / v_gran [min].',
-              'Проверка на размерност: N_i,eff [чов.] × k_queue [min/чов.] = [min]; този член се добавя към L_i / v_гран [min].'
-            )}</p>`);
-          } else {
-            lines.push(`<p>${note(
-              'Free-flow branch: no queue term is added; travel time is purely geometric (distance over speed).',
-              'Free-flow branch: no queue term is added; travel time is purely geometric (distance over speed).'
-            )}</p>`);
-            lines.push(eqLine('τ<sub>i</sub>', `${eqFrac(`${num(l, 3)}`, `${num(v, 3)}`)} = ${num(τ, 4)} min`));
-          }
-        } else {
-          const density = Number(row.density) || 0;
-          lines.push(eqLine(
-            'D<sub>ai</sub>',
-            `${eqFrac(`${num(n, 3)}`, `${num(l, 3)} · ${num(d, 3)}`)} = ${num(density, 3)} чов./m²`
-          ));
-          lines.push(`<p>${note(
-            'Table 11 lookup is then applied using conservative upward class selection for intermediate density values.',
-            'Table 11 lookup is then applied using conservative upward class selection for intermediate density values.'
-          )}</p>`);
-          lines.push(eqLine('v<sub>i</sub>', `${num(v, 3)} m/min`, note('from Table 11 at adopted D_ai', 'по табл. 11 при приетата D_ai')));
-          lines.push(eqLine('τ<sub>i</sub>', `${eqFrac(`${num(l, 3)}`, `${num(v, 3)}`)} = ${num(τ, 4)} min`));
-          lines.push(`<p>${note(
-            'Dimensional check: [m] / [m/min] = [min], which validates τᵢ units.',
-            'Dimensional check: [m] / [m/min] = [min], which validates τᵢ units.'
-          )}</p>`);
-        }
-
-        if (row.lengthMismatch) {
-          lines.push(`<div class="proof-warn">${escHtml(t(
-            'report.table.lengthWarningValue',
-            { specified: num(row.specifiedLength, 2), actual: num(row.length, 2) },
-            `Specified ${num(row.specifiedLength, 2)} m, using ${num(row.length, 2)} m`
-          ))}</div>`);
-        }
-        lines.push(`<p>${escHtml(t('proof.seg.result', { time: num(τ, 4), status: row.severityLabel }, `Result: τ=${num(τ, 4)} min, status=${row.severityLabel}`))}</p>`);
-        return `<div class="segment-block">${lines.join('')}</div>`;
-      }).join('');
+    // Delegate proof generation to core.js (single source of truth).
+    // The engine's generateMathProof() produces a verbose, formatted
+    // plain-text proof with Unicode symbols, normative citations, and
+    // box-drawing characters.
+    const engine = syncCalcEngineState();
+    if (!engine) {
+      mathProofContent.textContent = 'SalamanderCore is not loaded.';
+      return;
     }
 
-    const exits = state.nodes.filter(n => n.typeId === 'exit');
-    const exitHtml = exits.length > 0
-      ? `<ul>${exits.map((e) => `<li>${escHtml(e.name || `${t('table.nodes.id', null, 'ID')} ${e.id}`)}: τ = ${num(e.maxTime, 4)} min</li>`).join('')}</ul>`
-      : `<p>${note('No explicit exit node is defined. The maximum reachable node time is used.', 'Няма дефиниран изходен възел. Използва се максималното достижимо време по възли.')}</p>`;
-
-    const resultRiskLine = report.bottleneckCount > 0
-      ? t(
-        'report.summary.riskSome',
-        { count: report.bottleneckCount, blocked: report.blockedCount, queues: report.queueCount },
-        `${report.bottleneckCount} bottleneck segments were found (${report.blockedCount} blocked, ${report.queueCount} with queues).`
-      )
-      : t('report.summary.riskNone', null, 'No bottlenecks or blocked segments were detected.');
-    const sumTerms = report.rows
-      .map(r => num(r.time, 4))
-      .slice(0, 10)
-      .join(' + ');
-    const sumExpression = report.rows.length > 10
-      ? `${sumTerms} + ... (${report.rows.length} terms)`
-      : (sumTerms || '0');
-
-    const resultHtml = `
-      <h4>${escHtml(t('proof.result', null, 'Final Result and Compliance Notes'))}</h4>
-      <p>${note(
-        'The final evacuation time equals the algebraic sum of segment travel times along the governing route to final evacuation exit.',
-        'Крайното време за евакуация е алгебрична сума от времената за всички участъци по определящия маршрут до крайния евакуационен изход.'
-      )}</p>
-      ${eqLine('τ<sub>ев</sub>', `Σ τ<sub>i</sub> = ${num(report.totalTime, 3)} min`)}
-      ${eqLine('τ<sub>ев</sub>', `${sumExpression} = ${num(report.totalTime, 3)} min`, note('explicit summation of computed segment times', 'явна сума на изчислените времена по участъци'))}
-      ${exitHtml}
-      ${report.lengthMismatchCount > 0 ? `<div class="proof-warn">${escHtml(t('proof.lengthWarnings', { count: report.lengthMismatchCount }, `Length warning: ${report.lengthMismatchCount} connections use geometric length different from the specified user value.`))}</div>` : ''}
-      <p>${escHtml(resultRiskLine)}</p>
-    `;
-
-    const citationsHtml = `
-      <h4>${escHtml(t('proof.citations', null, 'Quoted Bulgarian Legal Text (reference excerpts)'))}</h4>
-      ${lawQuote('При определяне на плътността ... не се отчитат хората, успели да напуснат участъка до неговото запълване.', 'Приложение № 8а, раздел I, т. 11')}
-      ${lawQuote('След всяко получаване на текущата специфична пропускателна способност qi стойността ѝ се сравнява с максимално възможната за дадения вид път (qmax)...', 'Приложение 8а, раздел III, т. 5')}
-      ${lawQuote('... за хоризонтални участъци максимално възможната стойност ... е 164,2 чов./m.min, за врати ... 199,1 чов./m.min ...', 'Приложение 8а, раздел III, т. 5; чл. 63, ал. 5')}
-      ${lawQuote('Когато ... q_i е по-голяма от qmax ... движението ще се извършва при гранична плътност ... с параметри vгран и qгран.', 'Приложение 8а, раздел III, т. 5, буква „б“')}
-      ${lawQuote('Времето за преминаване през участък със задръжка се определя по формулата ... където Ni е брой на хората в участък i.', 'Приложение № 8а, раздел III, т. 5, буква „б“ (продължение на формулата)')}
-      ${lawQuote('Вратите/отворите ... се считат за отделни участъци ... при стена с дебелина до 0,7 m ... дължината ... се приема 0.', 'Приложение 8а, раздел III, т. 6')}
-      ${lawQuote('Изчислителното време за евакуация ... е сумата от времената ... през всички участъци (без и със задръжки).', 'Приложение 8а, раздел III, т. 7')}
-    `;
-
-    mathProofContent.innerHTML = [headerHtml, regulatoryHtml, modelHtml, segmentHtml, resultHtml, citationsHtml].join('');
+    const proofText = engine.generateMathProof();
+    mathProofContent.innerHTML = `<pre style="
+      font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre;
+      overflow-x: auto;
+      color: #e6edf3;
+      background: rgba(13, 17, 23, 0.85);
+      border: 1px solid rgba(48, 54, 61, 0.8);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 0;
+    ">${escHtml(proofText)}</pre>`;
   }
 
-  function exportReportPdf() {
-    state.metadata = normalizeMetadata({
-      ...state.metadata,
-      exportedAt: toLocalDateTimeValue(),
-    });
-    if (metaExportedAtInput) metaExportedAtInput.value = state.metadata.exportedAt || '';
+function exportReportPdf() {
+  state.metadata = normalizeMetadata({
+    ...state.metadata,
+    exportedAt: toLocalDateTimeValue(),
+  });
+  if (metaExportedAtInput) metaExportedAtInput.value = state.metadata.exportedAt || '';
 
-    const report = buildReportContext(true);
-    lastReportContext = report;
-    generateReportSummary(report);
-    generateReportTable(report);
-    generateMathProof(report);
-    generateReportDiagram(report, { theme: 'light' });
+  const report = buildReportContext(true);
+  lastReportContext = report;
+  generateReportSummary(report);
+  generateReportTable(report);
+  generateMathProof(report);
+  generateReportDiagram(report, { theme: 'light' });
 
-    if (!reportCanvas) {
-      alert(t('alert.reportDiagramUnavailable', null, 'Report diagram is not available for export.'));
-      return;
-    }
+  if (!reportCanvas) {
+    alert(t('alert.reportDiagramUnavailable', null, 'Report diagram is not available for export.'));
+    return;
+  }
 
-    const diagramDataUrl = reportCanvas.toDataURL('image/png');
-    generateReportDiagram(report, { theme: 'dark' });
-    render();
-    const proofHtml = mathProofContent ? mathProofContent.innerHTML : '';
+  const diagramDataUrl = reportCanvas.toDataURL('image/png');
+  generateReportDiagram(report, { theme: 'dark' });
+  render();
+  const proofHtml = mathProofContent ? mathProofContent.innerHTML : '';
 
-    const tableColumns = getReportTableColumns(report);
-    const tableHeaderHtml = tableColumns.map((col) => `<th>${escHtml(col.label)}</th>`).join('');
-    const tableRows = report.rows.map((row) => (
-      `<tr>${tableColumns.map((col) => `<td>${escHtml(getReportTableCellText(row, col.key))}</td>`).join('')}</tr>`
-    )).join('');
+  const tableColumns = getReportTableColumns(report);
+  const tableHeaderHtml = tableColumns.map((col) => `<th>${escHtml(col.label)}</th>`).join('');
+  const tableRows = report.rows.map((row) => (
+    `<tr>${tableColumns.map((col) => `<td>${escHtml(getReportTableCellText(row, col.key))}</td>`).join('')}</tr>`
+  )).join('');
 
-    const meta = report.metadata || {};
-    const summaryItems = [
-      [t('report.stat.totalTime', null, 'Total Evacuation Time'), `${formatNumeric(report.totalTime, 3)} min`],
-      [t('report.stat.totalPeople', null, 'Total People'), String(Math.round(report.totalPeople))],
-      [t('report.stat.criticalExits', null, 'Critical Exits'), String(report.criticalExits.length)],
-      [t('report.stat.connections', null, 'Connections'), String(report.connectionCount)],
-      [t('report.stat.bottlenecks', null, 'Bottlenecks'), String(report.bottleneckCount)],
-      [t('overlay.blocked', null, 'Blocked'), String(report.blockedCount)],
-      [t('overlay.queues', null, 'Queues'), String(report.queueCount)],
-      [t('report.meta.lengthWarnings', null, 'Length Mismatch Warnings'), String(report.lengthMismatchCount)],
-      [t('report.stat.graphSize', null, 'Graph Size'), report.graphSizeLabel],
-      [t('report.stat.method', null, 'Method'), report.methodLabel],
-      [t('report.stat.generated', null, 'Generated'), report.generatedAtDisplay],
-    ];
+  const meta = report.metadata || {};
+  const summaryItems = [
+    [t('report.stat.totalTime', null, 'Total Evacuation Time'), `${formatNumeric(report.totalTime, 3)} min`],
+    [t('report.stat.totalPeople', null, 'Total People'), String(Math.round(report.totalPeople))],
+    [t('report.stat.criticalExits', null, 'Critical Exits'), String(report.criticalExits.length)],
+    [t('report.stat.connections', null, 'Connections'), String(report.connectionCount)],
+    [t('report.stat.bottlenecks', null, 'Bottlenecks'), String(report.bottleneckCount)],
+    [t('overlay.blocked', null, 'Blocked'), String(report.blockedCount)],
+    [t('overlay.queues', null, 'Queues'), String(report.queueCount)],
+    [t('report.meta.lengthWarnings', null, 'Length Mismatch Warnings'), String(report.lengthMismatchCount)],
+    [t('report.stat.graphSize', null, 'Graph Size'), report.graphSizeLabel],
+    [t('report.stat.method', null, 'Method'), report.methodLabel],
+    [t('report.stat.generated', null, 'Generated'), report.generatedAtDisplay],
+  ];
 
-    const metaItems = [
-      [t('report.meta.project', null, 'Project'), meta.project || t('common.untitled', null, 'Untitled')],
-      [t('report.meta.author', null, 'Author'), meta.author || '-'],
-      [t('report.meta.company', null, 'Company'), meta.company || '-'],
-      [t('report.meta.scenarioDate', null, 'Scenario Date/Time'), formatDateTimeForDisplay(meta.dateTime)],
-      [t('report.meta.created', null, 'Created'), formatDateTimeForDisplay(meta.createdAt)],
-      [t('report.meta.exported', null, 'Exported'), formatDateTimeForDisplay(meta.exportedAt)],
-      [t('report.meta.version', null, 'Salamander Version'), meta.salamanderVersion || SALAMANDER_VERSION],
-      [t('metadata.notes', null, 'Notes'), meta.notes || '-'],
-    ];
+  const metaItems = [
+    [t('report.meta.project', null, 'Project'), meta.project || t('common.untitled', null, 'Untitled')],
+    [t('report.meta.author', null, 'Author'), meta.author || '-'],
+    [t('report.meta.company', null, 'Company'), meta.company || '-'],
+    [t('report.meta.scenarioDate', null, 'Scenario Date/Time'), formatDateTimeForDisplay(meta.dateTime)],
+    [t('report.meta.created', null, 'Created'), formatDateTimeForDisplay(meta.createdAt)],
+    [t('report.meta.exported', null, 'Exported'), formatDateTimeForDisplay(meta.exportedAt)],
+    [t('report.meta.version', null, 'Salamander Version'), meta.salamanderVersion || SALAMANDER_VERSION],
+    [t('metadata.notes', null, 'Notes'), meta.notes || '-'],
+  ];
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert(t('alert.popupBlocked', null, 'Popup blocked. Please allow popups to export report PDF.'));
-      return;
-    }
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    alert(t('alert.popupBlocked', null, 'Popup blocked. Please allow popups to export report PDF.'));
+    return;
+  }
 
-    printWindow.document.write(`<!doctype html>
+  printWindow.document.write(`<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
@@ -4331,8 +4016,8 @@
     </div>
     <p><strong>${escHtml(t('pdf.interpretationLabel', null, 'Interpretation'))}:</strong> ${escHtml(t('pdf.interpretation', null, 'This report captures the current network geometry, applied movement method, queue/capacity behavior, and segment-by-segment timing contribution to the final evacuation duration.'))}</p>
     <p><strong>${escHtml(t('pdf.risk.label', null, 'Risk Notes'))}:</strong> ${escHtml(report.bottleneckCount > 0
-      ? t('pdf.risk.some', { count: report.bottleneckCount }, `${report.bottleneckCount} bottleneck segments were detected and should be reviewed for added width, reduced load, or alternate routing.`)
-      : t('pdf.risk.none', null, 'No bottleneck segments were detected in the current state.'))}</p>
+    ? t('pdf.risk.some', { count: report.bottleneckCount }, `${report.bottleneckCount} bottleneck segments were detected and should be reviewed for added width, reduced load, or alternate routing.`)
+    : t('pdf.risk.none', null, 'No bottleneck segments were detected in the current state.'))}</p>
 
     <h2>${escHtml(t('pdf.section.metadata', null, 'Project Metadata'))}</h2>
     <div class="meta-grid">
@@ -4364,104 +4049,104 @@
 </body>
 </html>`);
 
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-    }, 350);
-  }
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+  }, 350);
+}
 
-  function selectItem(item, multi = false) {
-    if (!item) return;
-    const key = `${item.type}:${item.id}`;
+function selectItem(item, multi = false) {
+  if (!item) return;
+  const key = `${item.type}:${item.id}`;
 
-    if (!multi) {
-      selectedItems.clear();
-      selectedItems.add(key);
-    } else {
-      if (selectedItems.has(key)) {
-        selectedItems.delete(key);
-      } else {
-        selectedItems.add(key);
-      }
-    }
-    updatePropertiesPanel();
-    render();
-  }
-
-  function clearSelection() {
+  if (!multi) {
     selectedItems.clear();
-    updatePropertiesPanel();
-    render();
-  }
-
-  function sanitizeSelection() {
-    const next = new Set();
-    selectedItems.forEach(key => {
-      const [type, idStr] = key.split(':');
-      const id = parseInt(idStr, 10);
-      if (type === 'node' && state.nodes.some(n => n.id === id)) next.add(key);
-      if (type === 'connection' && state.connections.some(c => c.id === id)) next.add(key);
-    });
-    selectedItems = next;
-  }
-
-  function deleteSelection() {
-    if (selectedItems.size === 0) return;
-
-    let changed = false;
-    // Convert to array to avoid modification during iteration issues
-    const keys = Array.from(selectedItems);
-    keys.forEach(key => {
-      const [type, idStr] = key.split(':');
-      const id = parseInt(idStr);
-      if (type === 'node') {
-        deleteNode(id, { skipHistory: true });
-        changed = true;
-      } else if (type === 'connection') {
-        deleteConnection(id, { skipHistory: true });
-        changed = true;
-      }
-    });
-
-    clearSelection();
-    if (changed) commitHistory();
-  }
-
-  // ─── Properties Panel Logic ──────────────────────────────
-  function updatePropertiesPanel() {
-    sanitizeSelection();
-    // Clear content
-    propsContent.innerHTML = '';
-
-    if (selectedItems.size === 0) {
-      propsContent.appendChild(sidebarEmpty);
-      sidebarEmpty.style.display = 'flex';
-      return;
+    selectedItems.add(key);
+  } else {
+    if (selectedItems.has(key)) {
+      selectedItems.delete(key);
+    } else {
+      selectedItems.add(key);
     }
-    sidebarEmpty.style.display = 'none';
+  }
+  updatePropertiesPanel();
+  render();
+}
 
-    // Group selection by type
-    const selNodes = [];
-    const selConns = [];
+function clearSelection() {
+  selectedItems.clear();
+  updatePropertiesPanel();
+  render();
+}
 
-    selectedItems.forEach(key => {
-      const [type, idStr] = key.split(':');
-      const id = parseInt(idStr);
-      if (type === 'node') {
-        const n = state.nodes.find(x => x.id === id);
-        if (n) selNodes.push(n);
-      } else {
-        const c = state.connections.find(x => x.id === id);
-        if (c) selConns.push(c);
-      }
-    });
+function sanitizeSelection() {
+  const next = new Set();
+  selectedItems.forEach(key => {
+    const [type, idStr] = key.split(':');
+    const id = parseInt(idStr, 10);
+    if (type === 'node' && state.nodes.some(n => n.id === id)) next.add(key);
+    if (type === 'connection' && state.connections.some(c => c.id === id)) next.add(key);
+  });
+  selectedItems = next;
+}
 
-    const totalSelected = selNodes.length + selConns.length;
-    if (totalSelected === 0) return;
+function deleteSelection() {
+  if (selectedItems.size === 0) return;
 
-    // Header updates
-    propsHeader.innerHTML = `
+  let changed = false;
+  // Convert to array to avoid modification during iteration issues
+  const keys = Array.from(selectedItems);
+  keys.forEach(key => {
+    const [type, idStr] = key.split(':');
+    const id = parseInt(idStr);
+    if (type === 'node') {
+      deleteNode(id, { skipHistory: true });
+      changed = true;
+    } else if (type === 'connection') {
+      deleteConnection(id, { skipHistory: true });
+      changed = true;
+    }
+  });
+
+  clearSelection();
+  if (changed) commitHistory();
+}
+
+// ─── Properties Panel Logic ──────────────────────────────
+function updatePropertiesPanel() {
+  sanitizeSelection();
+  // Clear content
+  propsContent.innerHTML = '';
+
+  if (selectedItems.size === 0) {
+    propsContent.appendChild(sidebarEmpty);
+    sidebarEmpty.style.display = 'flex';
+    return;
+  }
+  sidebarEmpty.style.display = 'none';
+
+  // Group selection by type
+  const selNodes = [];
+  const selConns = [];
+
+  selectedItems.forEach(key => {
+    const [type, idStr] = key.split(':');
+    const id = parseInt(idStr);
+    if (type === 'node') {
+      const n = state.nodes.find(x => x.id === id);
+      if (n) selNodes.push(n);
+    } else {
+      const c = state.connections.find(x => x.id === id);
+      if (c) selConns.push(c);
+    }
+  });
+
+  const totalSelected = selNodes.length + selConns.length;
+  if (totalSelected === 0) return;
+
+  // Header updates
+  propsHeader.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
         <line x1="3" y1="9" x2="21" y2="9" />
@@ -4470,267 +4155,267 @@
       ${escHtml(t('props.editing', { count: totalSelected, itemWord: getLocalizedItemWord(totalSelected) }, `Editing ${totalSelected} ${getLocalizedItemWord(totalSelected)}`))}
     `;
 
-    // 1. Common Properties (Node)
-    if (selNodes.length > 0) {
-      const section = document.createElement('div');
-      section.className = 'prop-section';
-      section.innerHTML = `<h4>${escHtml(t('props.nodeProperties', { count: selNodes.length }, `Node Properties (${selNodes.length})`))}</h4>`;
+  // 1. Common Properties (Node)
+  if (selNodes.length > 0) {
+    const section = document.createElement('div');
+    section.className = 'prop-section';
+    section.innerHTML = `<h4>${escHtml(t('props.nodeProperties', { count: selNodes.length }, `Node Properties (${selNodes.length})`))}</h4>`;
 
-      // Name (Single only)
-      if (selNodes.length === 1) {
-        section.appendChild(createPropInput(t('props.name', null, 'Name'), 'text', selNodes[0].name, (val) => {
-          selNodes[0].name = val;
-          commitHistory();
-          render();
-        }));
-
-        // Coordinates (Read-only)
-        section.appendChild(createPropInput(t('props.x', null, 'X'), 'number', selNodes[0].x, () => { }, true));
-        section.appendChild(createPropInput(t('props.y', null, 'Y'), 'number', selNodes[0].y, () => { }, true));
-      }
-
-      // Type
-      const commonTypeId = getCommonValue(selNodes, n => n.typeId);
-      const localizedNodeTypes = state.nodeTypes.map((opt) => ({
-        ...opt,
-        name: getNodeTypeDisplayName(opt.id, opt.name),
+    // Name (Single only)
+    if (selNodes.length === 1) {
+      section.appendChild(createPropInput(t('props.name', null, 'Name'), 'text', selNodes[0].name, (val) => {
+        selNodes[0].name = val;
+        commitHistory();
+        render();
       }));
-      section.appendChild(createPropSelect(t('props.type', null, 'Type'), localizedNodeTypes, commonTypeId, (val) => {
-        selNodes.forEach(n => {
-          n.typeId = val;
-          if (val === 'door' && (!n.width || n.width <= 0)) n.width = 1.2;
-        });
+
+      // Coordinates (Read-only)
+      section.appendChild(createPropInput(t('props.x', null, 'X'), 'number', selNodes[0].x, () => { }, true));
+      section.appendChild(createPropInput(t('props.y', null, 'Y'), 'number', selNodes[0].y, () => { }, true));
+    }
+
+    // Type
+    const commonTypeId = getCommonValue(selNodes, n => n.typeId);
+    const localizedNodeTypes = state.nodeTypes.map((opt) => ({
+      ...opt,
+      name: getNodeTypeDisplayName(opt.id, opt.name),
+    }));
+    section.appendChild(createPropSelect(t('props.type', null, 'Type'), localizedNodeTypes, commonTypeId, (val) => {
+      selNodes.forEach(n => {
+        n.typeId = val;
+        if (val === 'door' && (!n.width || n.width <= 0)) n.width = 1.2;
+      });
+      recalcPeopleCounts();
+      commitHistory();
+      render();
+    }));
+
+    const commonPinned = getCommonValue(selNodes, n => !!n.pinned);
+    const pinnedValue = commonPinned === '<various>' ? '<various>' : String(commonPinned);
+    section.appendChild(createPropSelect(t('props.pinned', null, 'Pinned (Order Graph)'), [
+      { id: 'false', name: t('common.no', null, 'No') },
+      { id: 'true', name: t('common.yes', null, 'Yes') },
+    ], pinnedValue, (val) => {
+      const isPinned = val === 'true';
+      selNodes.forEach(n => n.pinned = isPinned);
+      commitHistory();
+      render();
+    }));
+
+    // People (Source nodes only)
+    const sourceNodes = selNodes.filter(n => ['start', 'start2'].includes(n.typeId));
+    if (sourceNodes.length > 0) {
+      const commonPeople = getCommonValue(sourceNodes, n => n.people || 0);
+      section.appendChild(createPropInput(t('props.peopleStart', null, 'People (Start)'), 'number', commonPeople, (val) => {
+        sourceNodes.forEach(n => n.people = parseInt(val) || 0);
         recalcPeopleCounts();
         commitHistory();
         render();
-      }));
+      }, sourceNodes.length !== selNodes.length)); // Disable if mixed source/non-source? No, just apply to sources.
+    }
 
-      const commonPinned = getCommonValue(selNodes, n => !!n.pinned);
-      const pinnedValue = commonPinned === '<various>' ? '<various>' : String(commonPinned);
-      section.appendChild(createPropSelect(t('props.pinned', null, 'Pinned (Order Graph)'), [
-        { id: 'false', name: t('common.no', null, 'No') },
-        { id: 'true', name: t('common.yes', null, 'Yes') },
-      ], pinnedValue, (val) => {
-        const isPinned = val === 'true';
-        selNodes.forEach(n => n.pinned = isPinned);
+    // Door width (Door nodes only)
+    const doorNodes = selNodes.filter(n => n.typeId === 'door');
+    if (doorNodes.length > 0) {
+      const commonDoorWidth = getCommonValue(doorNodes, n => roundWidthMeters(n.width || 1.2));
+      section.appendChild(createPropInput(t('props.doorWidth', null, 'Door Width (m)'), 'number', commonDoorWidth, (val) => {
+        const w = Math.max(0.05, roundWidthMeters(parseFloat(val) || 1.2));
+        doorNodes.forEach(n => n.width = w);
         commitHistory();
         render();
-      }));
-
-      // People (Source nodes only)
-      const sourceNodes = selNodes.filter(n => ['start', 'start2'].includes(n.typeId));
-      if (sourceNodes.length > 0) {
-        const commonPeople = getCommonValue(sourceNodes, n => n.people || 0);
-        section.appendChild(createPropInput(t('props.peopleStart', null, 'People (Start)'), 'number', commonPeople, (val) => {
-          sourceNodes.forEach(n => n.people = parseInt(val) || 0);
-          recalcPeopleCounts();
-          commitHistory();
-          render();
-        }, sourceNodes.length !== selNodes.length)); // Disable if mixed source/non-source? No, just apply to sources.
-      }
-
-      // Door width (Door nodes only)
-      const doorNodes = selNodes.filter(n => n.typeId === 'door');
-      if (doorNodes.length > 0) {
-        const commonDoorWidth = getCommonValue(doorNodes, n => roundWidthMeters(n.width || 1.2));
-        section.appendChild(createPropInput(t('props.doorWidth', null, 'Door Width (m)'), 'number', commonDoorWidth, (val) => {
-          const w = Math.max(0.05, roundWidthMeters(parseFloat(val) || 1.2));
-          doorNodes.forEach(n => n.width = w);
-          commitHistory();
-          render();
-        }, doorNodes.length !== selNodes.length, '0.05'));
-      }
-
-      propsContent.appendChild(section);
+      }, doorNodes.length !== selNodes.length, '0.05'));
     }
 
-    // 2. Common Properties (Connection)
-    if (selConns.length > 0) {
-      const section = document.createElement('div');
-      section.className = 'prop-section';
-      section.innerHTML = `<h4>${escHtml(t('props.connectionProperties', { count: selConns.length }, `Connection Properties (${selConns.length})`))}</h4>`;
+    propsContent.appendChild(section);
+  }
 
-      const commonConnName = getCommonValue(selConns, c => (typeof c.name === 'string' ? c.name : ''));
-      section.appendChild(createPropInput(t('props.name', null, 'Name'), 'text', commonConnName, (val) => {
-        const nextName = String(val || '').trim();
-        selConns.forEach(c => c.name = nextName);
+  // 2. Common Properties (Connection)
+  if (selConns.length > 0) {
+    const section = document.createElement('div');
+    section.className = 'prop-section';
+    section.innerHTML = `<h4>${escHtml(t('props.connectionProperties', { count: selConns.length }, `Connection Properties (${selConns.length})`))}</h4>`;
+
+    const commonConnName = getCommonValue(selConns, c => (typeof c.name === 'string' ? c.name : ''));
+    section.appendChild(createPropInput(t('props.name', null, 'Name'), 'text', commonConnName, (val) => {
+      const nextName = String(val || '').trim();
+      selConns.forEach(c => c.name = nextName);
+      commitHistory();
+      render();
+    }));
+
+    // Type
+    const commonTypeId = getCommonValue(selConns, c => c.typeId);
+    const localizedConnTypes = state.connTypes.map((opt) => ({
+      ...opt,
+      name: getConnTypeDisplayName(opt.id, opt.name),
+    }));
+    section.appendChild(createPropSelect(t('props.type', null, 'Type'), localizedConnTypes, commonTypeId, (val) => {
+      selConns.forEach(c => c.typeId = val);
+      commitHistory();
+      render();
+    }));
+
+    // Width
+    const commonWidth = getCommonValue(selConns, c => c.width || 1.2);
+    section.appendChild(createPropInput(t('props.width', null, 'Width (m)'), 'number', commonWidth, (val) => {
+      const widthVal = roundWidthMeters(parseFloat(val) || 1.2);
+      const clamped = Math.max(0.05, widthVal);
+      selConns.forEach(c => c.width = clamped);
+      recalcFireSafety();
+      commitHistory();
+      render();
+    }, false, '0.05'));
+
+    // Distance
+    const commonDist = getCommonValue(selConns, c => c.distance);
+    section.appendChild(createPropInput(t('props.distance', null, 'Distance (m)'), 'number', commonDist, (val) => {
+      const v = parseFloat(val);
+      if (!isNaN(v) && v > 0) {
+        const desired = Math.max(GRID_SIZE_METERS, roundDistanceMeters(v));
+        let changed = false;
+        selConns.forEach(c => {
+          changed = forceConnectionDistanceGeometry(c, desired) || changed;
+        });
+        if (!changed) return;
+        updateConnectionDistances();
         commitHistory();
+        updatePropertiesPanel();
         render();
-      }));
-
-      // Type
-      const commonTypeId = getCommonValue(selConns, c => c.typeId);
-      const localizedConnTypes = state.connTypes.map((opt) => ({
-        ...opt,
-        name: getConnTypeDisplayName(opt.id, opt.name),
-      }));
-      section.appendChild(createPropSelect(t('props.type', null, 'Type'), localizedConnTypes, commonTypeId, (val) => {
-        selConns.forEach(c => c.typeId = val);
-        commitHistory();
-        render();
-      }));
-
-      // Width
-      const commonWidth = getCommonValue(selConns, c => c.width || 1.2);
-      section.appendChild(createPropInput(t('props.width', null, 'Width (m)'), 'number', commonWidth, (val) => {
-        const widthVal = roundWidthMeters(parseFloat(val) || 1.2);
-        const clamped = Math.max(0.05, widthVal);
-        selConns.forEach(c => c.width = clamped);
-        recalcFireSafety();
-        commitHistory();
-        render();
-      }, false, '0.05'));
-
-      // Distance
-      const commonDist = getCommonValue(selConns, c => c.distance);
-      section.appendChild(createPropInput(t('props.distance', null, 'Distance (m)'), 'number', commonDist, (val) => {
-        const v = parseFloat(val);
-        if (!isNaN(v) && v > 0) {
-          const desired = Math.max(GRID_SIZE_METERS, roundDistanceMeters(v));
-          let changed = false;
-          selConns.forEach(c => {
-            changed = forceConnectionDistanceGeometry(c, desired) || changed;
-          });
-          if (!changed) return;
-          updateConnectionDistances();
-          commitHistory();
-          updatePropertiesPanel();
-          render();
-        }
-      }, false, '0.05'));
-
-      const mismatchItems = selConns
-        .map((c) => ({ conn: c, info: getConnectionLengthDeltaInfo(c) }))
-        .filter((x) => x.info.mismatch);
-      if (mismatchItems.length > 0) {
-        const warn = document.createElement('div');
-        warn.className = 'prop-inline-warning';
-        const preview = mismatchItems.slice(0, 3).map((x) => (
-          `#${x.conn.id}: ${formatNumeric(x.info.specified, 2)} -> ${formatNumeric(x.info.actual, 2)} m`
-        )).join('; ');
-        const suffix = mismatchItems.length > 3 ? ` (+${mismatchItems.length - 3} more)` : '';
-        warn.textContent = t(
-          'props.warn.lengthMismatch',
-          { count: mismatchItems.length, preview, suffix },
-          `Warning: ${mismatchItems.length} selected connection lengths differ from the user-specified value. ${preview}${suffix}`
-        );
-        section.appendChild(warn);
       }
+    }, false, '0.05'));
 
-      propsContent.appendChild(section);
-    }
-  }
-
-  // Helper to create inputs
-  function createPropInput(label, type, value, onChange, disabled = false, stepOverride = null) {
-    const div = document.createElement('div');
-    div.className = 'prop-group' + (value === '<various>' ? ' various' : '');
-    const id = `prop-${label.replace(/\s+/g, '-')}-${Math.random().toString(36).substr(2, 5)}`;
-
-    div.innerHTML = `<label for="${id}">${label}</label>`;
-    const input = document.createElement('input');
-    input.type = type === 'number' ? 'number' : 'text';
-    input.id = id;
-    if (type === 'number') input.step = stepOverride || '0.1';
-
-    if (value === '<various>') {
-      input.value = ''; // empty input to show placeholder
-      input.placeholder = t('common.various', null, '<various>');
-    } else {
-      input.value = value;
+    const mismatchItems = selConns
+      .map((c) => ({ conn: c, info: getConnectionLengthDeltaInfo(c) }))
+      .filter((x) => x.info.mismatch);
+    if (mismatchItems.length > 0) {
+      const warn = document.createElement('div');
+      warn.className = 'prop-inline-warning';
+      const preview = mismatchItems.slice(0, 3).map((x) => (
+        `#${x.conn.id}: ${formatNumeric(x.info.specified, 2)} -> ${formatNumeric(x.info.actual, 2)} m`
+      )).join('; ');
+      const suffix = mismatchItems.length > 3 ? ` (+${mismatchItems.length - 3} more)` : '';
+      warn.textContent = t(
+        'props.warn.lengthMismatch',
+        { count: mismatchItems.length, preview, suffix },
+        `Warning: ${mismatchItems.length} selected connection lengths differ from the user-specified value. ${preview}${suffix}`
+      );
+      section.appendChild(warn);
     }
 
-    if (disabled) input.disabled = true;
+    propsContent.appendChild(section);
+  }
+}
 
-    input.addEventListener('change', (e) => {
-      const val = e.target.value;
-      if (val !== '') { // Only trigger change if value is not empty (unless clearing?)
-        onChange(val);
-      }
-    });
-    div.appendChild(input);
-    return div;
+// Helper to create inputs
+function createPropInput(label, type, value, onChange, disabled = false, stepOverride = null) {
+  const div = document.createElement('div');
+  div.className = 'prop-group' + (value === '<various>' ? ' various' : '');
+  const id = `prop-${label.replace(/\s+/g, '-')}-${Math.random().toString(36).substr(2, 5)}`;
+
+  div.innerHTML = `<label for="${id}">${label}</label>`;
+  const input = document.createElement('input');
+  input.type = type === 'number' ? 'number' : 'text';
+  input.id = id;
+  if (type === 'number') input.step = stepOverride || '0.1';
+
+  if (value === '<various>') {
+    input.value = ''; // empty input to show placeholder
+    input.placeholder = t('common.various', null, '<various>');
+  } else {
+    input.value = value;
   }
 
-  function createPropSelect(label, options, value, onChange) {
-    const div = document.createElement('div');
-    div.className = 'prop-group' + (value === '<various>' ? ' various' : '');
-    const id = `prop-${label.replace(/\s+/g, '-')}-${Math.random().toString(36).substr(2, 5)}`;
+  if (disabled) input.disabled = true;
 
-    div.innerHTML = `<label for="${id}">${label}</label>`;
-    const select = document.createElement('select');
-    select.id = id;
-
-    // Add options
-    options.forEach(opt => {
-      const el = document.createElement('option');
-      el.value = opt.id;
-      el.textContent = opt.name;
-      select.appendChild(el);
-    });
-
-    if (value === '<various>') {
-      const varOpt = document.createElement('option');
-      varOpt.value = '';
-      varOpt.textContent = t('common.various', null, '<various>');
-      varOpt.selected = true;
-      select.prepend(varOpt);
-    } else {
-      select.value = value;
+  input.addEventListener('change', (e) => {
+    const val = e.target.value;
+    if (val !== '') { // Only trigger change if value is not empty (unless clearing?)
+      onChange(val);
     }
+  });
+  div.appendChild(input);
+  return div;
+}
 
-    select.addEventListener('change', (e) => onChange(e.target.value));
-    div.appendChild(select);
-    return div;
+function createPropSelect(label, options, value, onChange) {
+  const div = document.createElement('div');
+  div.className = 'prop-group' + (value === '<various>' ? ' various' : '');
+  const id = `prop-${label.replace(/\s+/g, '-')}-${Math.random().toString(36).substr(2, 5)}`;
+
+  div.innerHTML = `<label for="${id}">${label}</label>`;
+  const select = document.createElement('select');
+  select.id = id;
+
+  // Add options
+  options.forEach(opt => {
+    const el = document.createElement('option');
+    el.value = opt.id;
+    el.textContent = opt.name;
+    select.appendChild(el);
+  });
+
+  if (value === '<various>') {
+    const varOpt = document.createElement('option');
+    varOpt.value = '';
+    varOpt.textContent = t('common.various', null, '<various>');
+    varOpt.selected = true;
+    select.prepend(varOpt);
+  } else {
+    select.value = value;
   }
 
-  function getCommonValue(items, getter) {
-    if (items.length === 0) return null;
-    const first = getter(items[0]);
-    for (let i = 1; i < items.length; i++) {
-      if (getter(items[i]) !== first) return '<various>';
-    }
-    return first;
+  select.addEventListener('change', (e) => onChange(e.target.value));
+  div.appendChild(select);
+  return div;
+}
+
+function getCommonValue(items, getter) {
+  if (items.length === 0) return null;
+  const first = getter(items[0]);
+  for (let i = 1; i < items.length; i++) {
+    if (getter(items[i]) !== first) return '<various>';
   }
+  return first;
+}
 
-  // ─── Legend ──────────────────────────────────────────────
-  function renderLegend() {
-    if (!legendContent) return;
-    legendContent.innerHTML = '';
+// ─── Legend ──────────────────────────────────────────────
+function renderLegend() {
+  if (!legendContent) return;
+  legendContent.innerHTML = '';
 
-    // Nodes
-    state.nodeTypes.forEach(t => {
-      const item = document.createElement('div');
-      item.className = 'legend-item';
-      item.innerHTML = `
+  // Nodes
+  state.nodeTypes.forEach(t => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.innerHTML = `
         <div class="legend-dot" style="background:${t.color}"></div>
         <span>${escHtml(getNodeTypeDisplayName(t.id, t.name))}</span>
       `;
-      legendContent.appendChild(item);
-    });
+    legendContent.appendChild(item);
+  });
 
-    // Connections
-    state.connTypes.forEach(t => {
-      const item = document.createElement('div');
-      item.className = 'legend-item';
-      // Dashed line viz
-      const dash = t.dash.length > 0 ? 'dashed' : 'solid';
-      item.innerHTML = `
+  // Connections
+  state.connTypes.forEach(t => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    // Dashed line viz
+    const dash = t.dash.length > 0 ? 'dashed' : 'solid';
+    item.innerHTML = `
         <div class="legend-line" style="background:${t.color}; border-bottom:${dash === 'dashed' ? '1px dashed' : 'none'}"></div>
         <span>${escHtml(getConnTypeDisplayName(t.id, t.name))}</span>
       `;
-      legendContent.appendChild(item);
-    });
-  }
+    legendContent.appendChild(item);
+  });
+}
 
-  // Utils
-  function colorToHex(color) {
-    const ctx = document.createElement('canvas').getContext('2d');
-    ctx.fillStyle = color;
-    return ctx.fillStyle;
-  }
-  // Expose for table clicks
-  window.selectNode = (id) => selectItem({ type: 'node', id });
-  window.selectConnection = (id) => selectItem({ type: 'connection', id });
-})();
+// Utils
+function colorToHex(color) {
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.fillStyle = color;
+  return ctx.fillStyle;
+}
+// Expose for table clicks
+window.selectNode = (id) => selectItem({ type: 'node', id });
+window.selectConnection = (id) => selectItem({ type: 'connection', id });
+}) ();
 

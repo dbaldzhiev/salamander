@@ -1,6 +1,6 @@
-# Node Graph Editor
+# Salamander — VSODT Evacuation Time Calculator
 
-A premium, dark-themed interactive node graph editor built with vanilla HTML5 Canvas and JavaScript.
+A premium, dark-themed interactive node graph editor for modeling fire safety evacuation paths, built with vanilla HTML5 Canvas and JavaScript. Implements the Bulgarian Fire Safety Evacuation Norms (Ordinance Iz-1971, Annex 8a, DV бр. 91/2024).
 
 ## Features
 
@@ -26,7 +26,7 @@ A premium, dark-themed interactive node graph editor built with vanilla HTML5 Ca
 - **Flow Calculation**: Automatically propagates "People Count" from Start nodes through the network based on connection direction.
 - **T/X Intersections**: Click on any connection to split it and create a new node at that point.
 
-## How to Run
+## How to Run (Web App)
 
 You need [Node.js](https://nodejs.org/) installed to run the local development server.
 
@@ -37,7 +37,58 @@ You need [Node.js](https://nodejs.org/) installed to run the local development s
    ```
 3. Open **http://localhost:3000** in your web browser.
 
-## key Shortcuts
+## CLI Usage (Terminal Calculation)
+
+You can run the evacuation calculation directly from the terminal without opening the web app. This is useful for batch processing, scripting, or generating formal proof documents.
+
+### Basic Usage
+
+```bash
+node core.js <input.json> [options]
+```
+
+### Options
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-p`, `--print` | Print the proof directly to the terminal (stdout) | *(off)* |
+| `-o`, `--output <file>` | Write proof to a file | `mathproof.txt` |
+| `-m`, `--method <A\|B>` | Calculation method: **A** (path length) or **B** (specific throughput) | `B` |
+| `-r`, `--regs <file>` | Path to regulations JSON file | `./regulations.json` |
+| `-h`, `--help` | Show help message | |
+
+### Examples
+
+**Print the full proof to your terminal:**
+```bash
+node core.js GraphExample.json --print
+```
+
+**Save the proof to a custom file:**
+```bash
+node core.js GraphExample.json -o evacuation_report.txt
+```
+
+**Use Method A instead of Method B:**
+```bash
+node core.js GraphExample.json --print --method A
+```
+
+**Use a custom regulations file:**
+```bash
+node core.js GraphExample.json -p -r ./custom_regs.json
+```
+
+### Proof Output
+
+The proof includes:
+- **Unicode formatting** with Greek letters (τ, δ, ℓ, ν) and box-drawing characters
+- **Step-by-step formulas** with value substitution for every segment
+- **Normative citations** referencing specific clauses of Annex 8a (e.g., `[Annex 8a, III.5(b)]`)
+- **Bottleneck detection** with queue formation analysis
+- **Final evacuation time** with critical path identification
+
+## Key Shortcuts
 
 - **V**: Select Mode (Drag to move, click to edit)
 - **N**: Add Node Mode (Click empty space to add)
