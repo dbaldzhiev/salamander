@@ -637,6 +637,12 @@
     state.totalEvacuationTime = Number(engine.state.totalEvacuationTime) || 0;
   }
 
+  /** Thin accessor — still needed by buildReportContext for limit data. */
+  function getLimitParams(typeId) {
+    const engine = syncCalcEngineState();
+    return engine ? engine.getLimitParams(typeId) : { q_max: 164, q_gran: 135, v_gran: 14 };
+  }
+
 
   function recalcFireSafety() {
     if (!state.regulations) return;
@@ -3891,69 +3897,69 @@
     ">${escHtml(proofText)}</pre>`;
   }
 
-function exportReportPdf() {
-  state.metadata = normalizeMetadata({
-    ...state.metadata,
-    exportedAt: toLocalDateTimeValue(),
-  });
-  if (metaExportedAtInput) metaExportedAtInput.value = state.metadata.exportedAt || '';
+  function exportReportPdf() {
+    state.metadata = normalizeMetadata({
+      ...state.metadata,
+      exportedAt: toLocalDateTimeValue(),
+    });
+    if (metaExportedAtInput) metaExportedAtInput.value = state.metadata.exportedAt || '';
 
-  const report = buildReportContext(true);
-  lastReportContext = report;
-  generateReportSummary(report);
-  generateReportTable(report);
-  generateMathProof(report);
-  generateReportDiagram(report, { theme: 'light' });
+    const report = buildReportContext(true);
+    lastReportContext = report;
+    generateReportSummary(report);
+    generateReportTable(report);
+    generateMathProof(report);
+    generateReportDiagram(report, { theme: 'light' });
 
-  if (!reportCanvas) {
-    alert(t('alert.reportDiagramUnavailable', null, 'Report diagram is not available for export.'));
-    return;
-  }
+    if (!reportCanvas) {
+      alert(t('alert.reportDiagramUnavailable', null, 'Report diagram is not available for export.'));
+      return;
+    }
 
-  const diagramDataUrl = reportCanvas.toDataURL('image/png');
-  generateReportDiagram(report, { theme: 'dark' });
-  render();
-  const proofHtml = mathProofContent ? mathProofContent.innerHTML : '';
+    const diagramDataUrl = reportCanvas.toDataURL('image/png');
+    generateReportDiagram(report, { theme: 'dark' });
+    render();
+    const proofHtml = mathProofContent ? mathProofContent.innerHTML : '';
 
-  const tableColumns = getReportTableColumns(report);
-  const tableHeaderHtml = tableColumns.map((col) => `<th>${escHtml(col.label)}</th>`).join('');
-  const tableRows = report.rows.map((row) => (
-    `<tr>${tableColumns.map((col) => `<td>${escHtml(getReportTableCellText(row, col.key))}</td>`).join('')}</tr>`
-  )).join('');
+    const tableColumns = getReportTableColumns(report);
+    const tableHeaderHtml = tableColumns.map((col) => `<th>${escHtml(col.label)}</th>`).join('');
+    const tableRows = report.rows.map((row) => (
+      `<tr>${tableColumns.map((col) => `<td>${escHtml(getReportTableCellText(row, col.key))}</td>`).join('')}</tr>`
+    )).join('');
 
-  const meta = report.metadata || {};
-  const summaryItems = [
-    [t('report.stat.totalTime', null, 'Total Evacuation Time'), `${formatNumeric(report.totalTime, 3)} min`],
-    [t('report.stat.totalPeople', null, 'Total People'), String(Math.round(report.totalPeople))],
-    [t('report.stat.criticalExits', null, 'Critical Exits'), String(report.criticalExits.length)],
-    [t('report.stat.connections', null, 'Connections'), String(report.connectionCount)],
-    [t('report.stat.bottlenecks', null, 'Bottlenecks'), String(report.bottleneckCount)],
-    [t('overlay.blocked', null, 'Blocked'), String(report.blockedCount)],
-    [t('overlay.queues', null, 'Queues'), String(report.queueCount)],
-    [t('report.meta.lengthWarnings', null, 'Length Mismatch Warnings'), String(report.lengthMismatchCount)],
-    [t('report.stat.graphSize', null, 'Graph Size'), report.graphSizeLabel],
-    [t('report.stat.method', null, 'Method'), report.methodLabel],
-    [t('report.stat.generated', null, 'Generated'), report.generatedAtDisplay],
-  ];
+    const meta = report.metadata || {};
+    const summaryItems = [
+      [t('report.stat.totalTime', null, 'Total Evacuation Time'), `${formatNumeric(report.totalTime, 3)} min`],
+      [t('report.stat.totalPeople', null, 'Total People'), String(Math.round(report.totalPeople))],
+      [t('report.stat.criticalExits', null, 'Critical Exits'), String(report.criticalExits.length)],
+      [t('report.stat.connections', null, 'Connections'), String(report.connectionCount)],
+      [t('report.stat.bottlenecks', null, 'Bottlenecks'), String(report.bottleneckCount)],
+      [t('overlay.blocked', null, 'Blocked'), String(report.blockedCount)],
+      [t('overlay.queues', null, 'Queues'), String(report.queueCount)],
+      [t('report.meta.lengthWarnings', null, 'Length Mismatch Warnings'), String(report.lengthMismatchCount)],
+      [t('report.stat.graphSize', null, 'Graph Size'), report.graphSizeLabel],
+      [t('report.stat.method', null, 'Method'), report.methodLabel],
+      [t('report.stat.generated', null, 'Generated'), report.generatedAtDisplay],
+    ];
 
-  const metaItems = [
-    [t('report.meta.project', null, 'Project'), meta.project || t('common.untitled', null, 'Untitled')],
-    [t('report.meta.author', null, 'Author'), meta.author || '-'],
-    [t('report.meta.company', null, 'Company'), meta.company || '-'],
-    [t('report.meta.scenarioDate', null, 'Scenario Date/Time'), formatDateTimeForDisplay(meta.dateTime)],
-    [t('report.meta.created', null, 'Created'), formatDateTimeForDisplay(meta.createdAt)],
-    [t('report.meta.exported', null, 'Exported'), formatDateTimeForDisplay(meta.exportedAt)],
-    [t('report.meta.version', null, 'Salamander Version'), meta.salamanderVersion || SALAMANDER_VERSION],
-    [t('metadata.notes', null, 'Notes'), meta.notes || '-'],
-  ];
+    const metaItems = [
+      [t('report.meta.project', null, 'Project'), meta.project || t('common.untitled', null, 'Untitled')],
+      [t('report.meta.author', null, 'Author'), meta.author || '-'],
+      [t('report.meta.company', null, 'Company'), meta.company || '-'],
+      [t('report.meta.scenarioDate', null, 'Scenario Date/Time'), formatDateTimeForDisplay(meta.dateTime)],
+      [t('report.meta.created', null, 'Created'), formatDateTimeForDisplay(meta.createdAt)],
+      [t('report.meta.exported', null, 'Exported'), formatDateTimeForDisplay(meta.exportedAt)],
+      [t('report.meta.version', null, 'Salamander Version'), meta.salamanderVersion || SALAMANDER_VERSION],
+      [t('metadata.notes', null, 'Notes'), meta.notes || '-'],
+    ];
 
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    alert(t('alert.popupBlocked', null, 'Popup blocked. Please allow popups to export report PDF.'));
-    return;
-  }
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert(t('alert.popupBlocked', null, 'Popup blocked. Please allow popups to export report PDF.'));
+      return;
+    }
 
-  printWindow.document.write(`<!doctype html>
+    printWindow.document.write(`<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
@@ -4016,8 +4022,8 @@ function exportReportPdf() {
     </div>
     <p><strong>${escHtml(t('pdf.interpretationLabel', null, 'Interpretation'))}:</strong> ${escHtml(t('pdf.interpretation', null, 'This report captures the current network geometry, applied movement method, queue/capacity behavior, and segment-by-segment timing contribution to the final evacuation duration.'))}</p>
     <p><strong>${escHtml(t('pdf.risk.label', null, 'Risk Notes'))}:</strong> ${escHtml(report.bottleneckCount > 0
-    ? t('pdf.risk.some', { count: report.bottleneckCount }, `${report.bottleneckCount} bottleneck segments were detected and should be reviewed for added width, reduced load, or alternate routing.`)
-    : t('pdf.risk.none', null, 'No bottleneck segments were detected in the current state.'))}</p>
+      ? t('pdf.risk.some', { count: report.bottleneckCount }, `${report.bottleneckCount} bottleneck segments were detected and should be reviewed for added width, reduced load, or alternate routing.`)
+      : t('pdf.risk.none', null, 'No bottleneck segments were detected in the current state.'))}</p>
 
     <h2>${escHtml(t('pdf.section.metadata', null, 'Project Metadata'))}</h2>
     <div class="meta-grid">
@@ -4049,104 +4055,104 @@ function exportReportPdf() {
 </body>
 </html>`);
 
-  printWindow.document.close();
-  printWindow.focus();
-  setTimeout(() => {
-    printWindow.print();
-  }, 350);
-}
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 350);
+  }
 
-function selectItem(item, multi = false) {
-  if (!item) return;
-  const key = `${item.type}:${item.id}`;
+  function selectItem(item, multi = false) {
+    if (!item) return;
+    const key = `${item.type}:${item.id}`;
 
-  if (!multi) {
-    selectedItems.clear();
-    selectedItems.add(key);
-  } else {
-    if (selectedItems.has(key)) {
-      selectedItems.delete(key);
-    } else {
+    if (!multi) {
+      selectedItems.clear();
       selectedItems.add(key);
-    }
-  }
-  updatePropertiesPanel();
-  render();
-}
-
-function clearSelection() {
-  selectedItems.clear();
-  updatePropertiesPanel();
-  render();
-}
-
-function sanitizeSelection() {
-  const next = new Set();
-  selectedItems.forEach(key => {
-    const [type, idStr] = key.split(':');
-    const id = parseInt(idStr, 10);
-    if (type === 'node' && state.nodes.some(n => n.id === id)) next.add(key);
-    if (type === 'connection' && state.connections.some(c => c.id === id)) next.add(key);
-  });
-  selectedItems = next;
-}
-
-function deleteSelection() {
-  if (selectedItems.size === 0) return;
-
-  let changed = false;
-  // Convert to array to avoid modification during iteration issues
-  const keys = Array.from(selectedItems);
-  keys.forEach(key => {
-    const [type, idStr] = key.split(':');
-    const id = parseInt(idStr);
-    if (type === 'node') {
-      deleteNode(id, { skipHistory: true });
-      changed = true;
-    } else if (type === 'connection') {
-      deleteConnection(id, { skipHistory: true });
-      changed = true;
-    }
-  });
-
-  clearSelection();
-  if (changed) commitHistory();
-}
-
-// ─── Properties Panel Logic ──────────────────────────────
-function updatePropertiesPanel() {
-  sanitizeSelection();
-  // Clear content
-  propsContent.innerHTML = '';
-
-  if (selectedItems.size === 0) {
-    propsContent.appendChild(sidebarEmpty);
-    sidebarEmpty.style.display = 'flex';
-    return;
-  }
-  sidebarEmpty.style.display = 'none';
-
-  // Group selection by type
-  const selNodes = [];
-  const selConns = [];
-
-  selectedItems.forEach(key => {
-    const [type, idStr] = key.split(':');
-    const id = parseInt(idStr);
-    if (type === 'node') {
-      const n = state.nodes.find(x => x.id === id);
-      if (n) selNodes.push(n);
     } else {
-      const c = state.connections.find(x => x.id === id);
-      if (c) selConns.push(c);
+      if (selectedItems.has(key)) {
+        selectedItems.delete(key);
+      } else {
+        selectedItems.add(key);
+      }
     }
-  });
+    updatePropertiesPanel();
+    render();
+  }
 
-  const totalSelected = selNodes.length + selConns.length;
-  if (totalSelected === 0) return;
+  function clearSelection() {
+    selectedItems.clear();
+    updatePropertiesPanel();
+    render();
+  }
 
-  // Header updates
-  propsHeader.innerHTML = `
+  function sanitizeSelection() {
+    const next = new Set();
+    selectedItems.forEach(key => {
+      const [type, idStr] = key.split(':');
+      const id = parseInt(idStr, 10);
+      if (type === 'node' && state.nodes.some(n => n.id === id)) next.add(key);
+      if (type === 'connection' && state.connections.some(c => c.id === id)) next.add(key);
+    });
+    selectedItems = next;
+  }
+
+  function deleteSelection() {
+    if (selectedItems.size === 0) return;
+
+    let changed = false;
+    // Convert to array to avoid modification during iteration issues
+    const keys = Array.from(selectedItems);
+    keys.forEach(key => {
+      const [type, idStr] = key.split(':');
+      const id = parseInt(idStr);
+      if (type === 'node') {
+        deleteNode(id, { skipHistory: true });
+        changed = true;
+      } else if (type === 'connection') {
+        deleteConnection(id, { skipHistory: true });
+        changed = true;
+      }
+    });
+
+    clearSelection();
+    if (changed) commitHistory();
+  }
+
+  // ─── Properties Panel Logic ──────────────────────────────
+  function updatePropertiesPanel() {
+    sanitizeSelection();
+    // Clear content
+    propsContent.innerHTML = '';
+
+    if (selectedItems.size === 0) {
+      propsContent.appendChild(sidebarEmpty);
+      sidebarEmpty.style.display = 'flex';
+      return;
+    }
+    sidebarEmpty.style.display = 'none';
+
+    // Group selection by type
+    const selNodes = [];
+    const selConns = [];
+
+    selectedItems.forEach(key => {
+      const [type, idStr] = key.split(':');
+      const id = parseInt(idStr);
+      if (type === 'node') {
+        const n = state.nodes.find(x => x.id === id);
+        if (n) selNodes.push(n);
+      } else {
+        const c = state.connections.find(x => x.id === id);
+        if (c) selConns.push(c);
+      }
+    });
+
+    const totalSelected = selNodes.length + selConns.length;
+    if (totalSelected === 0) return;
+
+    // Header updates
+    propsHeader.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
         <line x1="3" y1="9" x2="21" y2="9" />
@@ -4155,267 +4161,267 @@ function updatePropertiesPanel() {
       ${escHtml(t('props.editing', { count: totalSelected, itemWord: getLocalizedItemWord(totalSelected) }, `Editing ${totalSelected} ${getLocalizedItemWord(totalSelected)}`))}
     `;
 
-  // 1. Common Properties (Node)
-  if (selNodes.length > 0) {
-    const section = document.createElement('div');
-    section.className = 'prop-section';
-    section.innerHTML = `<h4>${escHtml(t('props.nodeProperties', { count: selNodes.length }, `Node Properties (${selNodes.length})`))}</h4>`;
+    // 1. Common Properties (Node)
+    if (selNodes.length > 0) {
+      const section = document.createElement('div');
+      section.className = 'prop-section';
+      section.innerHTML = `<h4>${escHtml(t('props.nodeProperties', { count: selNodes.length }, `Node Properties (${selNodes.length})`))}</h4>`;
 
-    // Name (Single only)
-    if (selNodes.length === 1) {
-      section.appendChild(createPropInput(t('props.name', null, 'Name'), 'text', selNodes[0].name, (val) => {
-        selNodes[0].name = val;
+      // Name (Single only)
+      if (selNodes.length === 1) {
+        section.appendChild(createPropInput(t('props.name', null, 'Name'), 'text', selNodes[0].name, (val) => {
+          selNodes[0].name = val;
+          commitHistory();
+          render();
+        }));
+
+        // Coordinates (Read-only)
+        section.appendChild(createPropInput(t('props.x', null, 'X'), 'number', selNodes[0].x, () => { }, true));
+        section.appendChild(createPropInput(t('props.y', null, 'Y'), 'number', selNodes[0].y, () => { }, true));
+      }
+
+      // Type
+      const commonTypeId = getCommonValue(selNodes, n => n.typeId);
+      const localizedNodeTypes = state.nodeTypes.map((opt) => ({
+        ...opt,
+        name: getNodeTypeDisplayName(opt.id, opt.name),
+      }));
+      section.appendChild(createPropSelect(t('props.type', null, 'Type'), localizedNodeTypes, commonTypeId, (val) => {
+        selNodes.forEach(n => {
+          n.typeId = val;
+          if (val === 'door' && (!n.width || n.width <= 0)) n.width = 1.2;
+        });
+        recalcPeopleCounts();
         commitHistory();
         render();
       }));
 
-      // Coordinates (Read-only)
-      section.appendChild(createPropInput(t('props.x', null, 'X'), 'number', selNodes[0].x, () => { }, true));
-      section.appendChild(createPropInput(t('props.y', null, 'Y'), 'number', selNodes[0].y, () => { }, true));
-    }
-
-    // Type
-    const commonTypeId = getCommonValue(selNodes, n => n.typeId);
-    const localizedNodeTypes = state.nodeTypes.map((opt) => ({
-      ...opt,
-      name: getNodeTypeDisplayName(opt.id, opt.name),
-    }));
-    section.appendChild(createPropSelect(t('props.type', null, 'Type'), localizedNodeTypes, commonTypeId, (val) => {
-      selNodes.forEach(n => {
-        n.typeId = val;
-        if (val === 'door' && (!n.width || n.width <= 0)) n.width = 1.2;
-      });
-      recalcPeopleCounts();
-      commitHistory();
-      render();
-    }));
-
-    const commonPinned = getCommonValue(selNodes, n => !!n.pinned);
-    const pinnedValue = commonPinned === '<various>' ? '<various>' : String(commonPinned);
-    section.appendChild(createPropSelect(t('props.pinned', null, 'Pinned (Order Graph)'), [
-      { id: 'false', name: t('common.no', null, 'No') },
-      { id: 'true', name: t('common.yes', null, 'Yes') },
-    ], pinnedValue, (val) => {
-      const isPinned = val === 'true';
-      selNodes.forEach(n => n.pinned = isPinned);
-      commitHistory();
-      render();
-    }));
-
-    // People (Source nodes only)
-    const sourceNodes = selNodes.filter(n => ['start', 'start2'].includes(n.typeId));
-    if (sourceNodes.length > 0) {
-      const commonPeople = getCommonValue(sourceNodes, n => n.people || 0);
-      section.appendChild(createPropInput(t('props.peopleStart', null, 'People (Start)'), 'number', commonPeople, (val) => {
-        sourceNodes.forEach(n => n.people = parseInt(val) || 0);
-        recalcPeopleCounts();
+      const commonPinned = getCommonValue(selNodes, n => !!n.pinned);
+      const pinnedValue = commonPinned === '<various>' ? '<various>' : String(commonPinned);
+      section.appendChild(createPropSelect(t('props.pinned', null, 'Pinned (Order Graph)'), [
+        { id: 'false', name: t('common.no', null, 'No') },
+        { id: 'true', name: t('common.yes', null, 'Yes') },
+      ], pinnedValue, (val) => {
+        const isPinned = val === 'true';
+        selNodes.forEach(n => n.pinned = isPinned);
         commitHistory();
         render();
-      }, sourceNodes.length !== selNodes.length)); // Disable if mixed source/non-source? No, just apply to sources.
-    }
+      }));
 
-    // Door width (Door nodes only)
-    const doorNodes = selNodes.filter(n => n.typeId === 'door');
-    if (doorNodes.length > 0) {
-      const commonDoorWidth = getCommonValue(doorNodes, n => roundWidthMeters(n.width || 1.2));
-      section.appendChild(createPropInput(t('props.doorWidth', null, 'Door Width (m)'), 'number', commonDoorWidth, (val) => {
-        const w = Math.max(0.05, roundWidthMeters(parseFloat(val) || 1.2));
-        doorNodes.forEach(n => n.width = w);
-        commitHistory();
-        render();
-      }, doorNodes.length !== selNodes.length, '0.05'));
-    }
-
-    propsContent.appendChild(section);
-  }
-
-  // 2. Common Properties (Connection)
-  if (selConns.length > 0) {
-    const section = document.createElement('div');
-    section.className = 'prop-section';
-    section.innerHTML = `<h4>${escHtml(t('props.connectionProperties', { count: selConns.length }, `Connection Properties (${selConns.length})`))}</h4>`;
-
-    const commonConnName = getCommonValue(selConns, c => (typeof c.name === 'string' ? c.name : ''));
-    section.appendChild(createPropInput(t('props.name', null, 'Name'), 'text', commonConnName, (val) => {
-      const nextName = String(val || '').trim();
-      selConns.forEach(c => c.name = nextName);
-      commitHistory();
-      render();
-    }));
-
-    // Type
-    const commonTypeId = getCommonValue(selConns, c => c.typeId);
-    const localizedConnTypes = state.connTypes.map((opt) => ({
-      ...opt,
-      name: getConnTypeDisplayName(opt.id, opt.name),
-    }));
-    section.appendChild(createPropSelect(t('props.type', null, 'Type'), localizedConnTypes, commonTypeId, (val) => {
-      selConns.forEach(c => c.typeId = val);
-      commitHistory();
-      render();
-    }));
-
-    // Width
-    const commonWidth = getCommonValue(selConns, c => c.width || 1.2);
-    section.appendChild(createPropInput(t('props.width', null, 'Width (m)'), 'number', commonWidth, (val) => {
-      const widthVal = roundWidthMeters(parseFloat(val) || 1.2);
-      const clamped = Math.max(0.05, widthVal);
-      selConns.forEach(c => c.width = clamped);
-      recalcFireSafety();
-      commitHistory();
-      render();
-    }, false, '0.05'));
-
-    // Distance
-    const commonDist = getCommonValue(selConns, c => c.distance);
-    section.appendChild(createPropInput(t('props.distance', null, 'Distance (m)'), 'number', commonDist, (val) => {
-      const v = parseFloat(val);
-      if (!isNaN(v) && v > 0) {
-        const desired = Math.max(GRID_SIZE_METERS, roundDistanceMeters(v));
-        let changed = false;
-        selConns.forEach(c => {
-          changed = forceConnectionDistanceGeometry(c, desired) || changed;
-        });
-        if (!changed) return;
-        updateConnectionDistances();
-        commitHistory();
-        updatePropertiesPanel();
-        render();
+      // People (Source nodes only)
+      const sourceNodes = selNodes.filter(n => ['start', 'start2'].includes(n.typeId));
+      if (sourceNodes.length > 0) {
+        const commonPeople = getCommonValue(sourceNodes, n => n.people || 0);
+        section.appendChild(createPropInput(t('props.peopleStart', null, 'People (Start)'), 'number', commonPeople, (val) => {
+          sourceNodes.forEach(n => n.people = parseInt(val) || 0);
+          recalcPeopleCounts();
+          commitHistory();
+          render();
+        }, sourceNodes.length !== selNodes.length)); // Disable if mixed source/non-source? No, just apply to sources.
       }
-    }, false, '0.05'));
 
-    const mismatchItems = selConns
-      .map((c) => ({ conn: c, info: getConnectionLengthDeltaInfo(c) }))
-      .filter((x) => x.info.mismatch);
-    if (mismatchItems.length > 0) {
-      const warn = document.createElement('div');
-      warn.className = 'prop-inline-warning';
-      const preview = mismatchItems.slice(0, 3).map((x) => (
-        `#${x.conn.id}: ${formatNumeric(x.info.specified, 2)} -> ${formatNumeric(x.info.actual, 2)} m`
-      )).join('; ');
-      const suffix = mismatchItems.length > 3 ? ` (+${mismatchItems.length - 3} more)` : '';
-      warn.textContent = t(
-        'props.warn.lengthMismatch',
-        { count: mismatchItems.length, preview, suffix },
-        `Warning: ${mismatchItems.length} selected connection lengths differ from the user-specified value. ${preview}${suffix}`
-      );
-      section.appendChild(warn);
+      // Door width (Door nodes only)
+      const doorNodes = selNodes.filter(n => n.typeId === 'door');
+      if (doorNodes.length > 0) {
+        const commonDoorWidth = getCommonValue(doorNodes, n => roundWidthMeters(n.width || 1.2));
+        section.appendChild(createPropInput(t('props.doorWidth', null, 'Door Width (m)'), 'number', commonDoorWidth, (val) => {
+          const w = Math.max(0.05, roundWidthMeters(parseFloat(val) || 1.2));
+          doorNodes.forEach(n => n.width = w);
+          commitHistory();
+          render();
+        }, doorNodes.length !== selNodes.length, '0.05'));
+      }
+
+      propsContent.appendChild(section);
     }
 
-    propsContent.appendChild(section);
-  }
-}
+    // 2. Common Properties (Connection)
+    if (selConns.length > 0) {
+      const section = document.createElement('div');
+      section.className = 'prop-section';
+      section.innerHTML = `<h4>${escHtml(t('props.connectionProperties', { count: selConns.length }, `Connection Properties (${selConns.length})`))}</h4>`;
 
-// Helper to create inputs
-function createPropInput(label, type, value, onChange, disabled = false, stepOverride = null) {
-  const div = document.createElement('div');
-  div.className = 'prop-group' + (value === '<various>' ? ' various' : '');
-  const id = `prop-${label.replace(/\s+/g, '-')}-${Math.random().toString(36).substr(2, 5)}`;
+      const commonConnName = getCommonValue(selConns, c => (typeof c.name === 'string' ? c.name : ''));
+      section.appendChild(createPropInput(t('props.name', null, 'Name'), 'text', commonConnName, (val) => {
+        const nextName = String(val || '').trim();
+        selConns.forEach(c => c.name = nextName);
+        commitHistory();
+        render();
+      }));
 
-  div.innerHTML = `<label for="${id}">${label}</label>`;
-  const input = document.createElement('input');
-  input.type = type === 'number' ? 'number' : 'text';
-  input.id = id;
-  if (type === 'number') input.step = stepOverride || '0.1';
+      // Type
+      const commonTypeId = getCommonValue(selConns, c => c.typeId);
+      const localizedConnTypes = state.connTypes.map((opt) => ({
+        ...opt,
+        name: getConnTypeDisplayName(opt.id, opt.name),
+      }));
+      section.appendChild(createPropSelect(t('props.type', null, 'Type'), localizedConnTypes, commonTypeId, (val) => {
+        selConns.forEach(c => c.typeId = val);
+        commitHistory();
+        render();
+      }));
 
-  if (value === '<various>') {
-    input.value = ''; // empty input to show placeholder
-    input.placeholder = t('common.various', null, '<various>');
-  } else {
-    input.value = value;
-  }
+      // Width
+      const commonWidth = getCommonValue(selConns, c => c.width || 1.2);
+      section.appendChild(createPropInput(t('props.width', null, 'Width (m)'), 'number', commonWidth, (val) => {
+        const widthVal = roundWidthMeters(parseFloat(val) || 1.2);
+        const clamped = Math.max(0.05, widthVal);
+        selConns.forEach(c => c.width = clamped);
+        recalcFireSafety();
+        commitHistory();
+        render();
+      }, false, '0.05'));
 
-  if (disabled) input.disabled = true;
+      // Distance
+      const commonDist = getCommonValue(selConns, c => c.distance);
+      section.appendChild(createPropInput(t('props.distance', null, 'Distance (m)'), 'number', commonDist, (val) => {
+        const v = parseFloat(val);
+        if (!isNaN(v) && v > 0) {
+          const desired = Math.max(GRID_SIZE_METERS, roundDistanceMeters(v));
+          let changed = false;
+          selConns.forEach(c => {
+            changed = forceConnectionDistanceGeometry(c, desired) || changed;
+          });
+          if (!changed) return;
+          updateConnectionDistances();
+          commitHistory();
+          updatePropertiesPanel();
+          render();
+        }
+      }, false, '0.05'));
 
-  input.addEventListener('change', (e) => {
-    const val = e.target.value;
-    if (val !== '') { // Only trigger change if value is not empty (unless clearing?)
-      onChange(val);
+      const mismatchItems = selConns
+        .map((c) => ({ conn: c, info: getConnectionLengthDeltaInfo(c) }))
+        .filter((x) => x.info.mismatch);
+      if (mismatchItems.length > 0) {
+        const warn = document.createElement('div');
+        warn.className = 'prop-inline-warning';
+        const preview = mismatchItems.slice(0, 3).map((x) => (
+          `#${x.conn.id}: ${formatNumeric(x.info.specified, 2)} -> ${formatNumeric(x.info.actual, 2)} m`
+        )).join('; ');
+        const suffix = mismatchItems.length > 3 ? ` (+${mismatchItems.length - 3} more)` : '';
+        warn.textContent = t(
+          'props.warn.lengthMismatch',
+          { count: mismatchItems.length, preview, suffix },
+          `Warning: ${mismatchItems.length} selected connection lengths differ from the user-specified value. ${preview}${suffix}`
+        );
+        section.appendChild(warn);
+      }
+
+      propsContent.appendChild(section);
     }
-  });
-  div.appendChild(input);
-  return div;
-}
-
-function createPropSelect(label, options, value, onChange) {
-  const div = document.createElement('div');
-  div.className = 'prop-group' + (value === '<various>' ? ' various' : '');
-  const id = `prop-${label.replace(/\s+/g, '-')}-${Math.random().toString(36).substr(2, 5)}`;
-
-  div.innerHTML = `<label for="${id}">${label}</label>`;
-  const select = document.createElement('select');
-  select.id = id;
-
-  // Add options
-  options.forEach(opt => {
-    const el = document.createElement('option');
-    el.value = opt.id;
-    el.textContent = opt.name;
-    select.appendChild(el);
-  });
-
-  if (value === '<various>') {
-    const varOpt = document.createElement('option');
-    varOpt.value = '';
-    varOpt.textContent = t('common.various', null, '<various>');
-    varOpt.selected = true;
-    select.prepend(varOpt);
-  } else {
-    select.value = value;
   }
 
-  select.addEventListener('change', (e) => onChange(e.target.value));
-  div.appendChild(select);
-  return div;
-}
+  // Helper to create inputs
+  function createPropInput(label, type, value, onChange, disabled = false, stepOverride = null) {
+    const div = document.createElement('div');
+    div.className = 'prop-group' + (value === '<various>' ? ' various' : '');
+    const id = `prop-${label.replace(/\s+/g, '-')}-${Math.random().toString(36).substr(2, 5)}`;
 
-function getCommonValue(items, getter) {
-  if (items.length === 0) return null;
-  const first = getter(items[0]);
-  for (let i = 1; i < items.length; i++) {
-    if (getter(items[i]) !== first) return '<various>';
+    div.innerHTML = `<label for="${id}">${label}</label>`;
+    const input = document.createElement('input');
+    input.type = type === 'number' ? 'number' : 'text';
+    input.id = id;
+    if (type === 'number') input.step = stepOverride || '0.1';
+
+    if (value === '<various>') {
+      input.value = ''; // empty input to show placeholder
+      input.placeholder = t('common.various', null, '<various>');
+    } else {
+      input.value = value;
+    }
+
+    if (disabled) input.disabled = true;
+
+    input.addEventListener('change', (e) => {
+      const val = e.target.value;
+      if (val !== '') { // Only trigger change if value is not empty (unless clearing?)
+        onChange(val);
+      }
+    });
+    div.appendChild(input);
+    return div;
   }
-  return first;
-}
 
-// ─── Legend ──────────────────────────────────────────────
-function renderLegend() {
-  if (!legendContent) return;
-  legendContent.innerHTML = '';
+  function createPropSelect(label, options, value, onChange) {
+    const div = document.createElement('div');
+    div.className = 'prop-group' + (value === '<various>' ? ' various' : '');
+    const id = `prop-${label.replace(/\s+/g, '-')}-${Math.random().toString(36).substr(2, 5)}`;
 
-  // Nodes
-  state.nodeTypes.forEach(t => {
-    const item = document.createElement('div');
-    item.className = 'legend-item';
-    item.innerHTML = `
+    div.innerHTML = `<label for="${id}">${label}</label>`;
+    const select = document.createElement('select');
+    select.id = id;
+
+    // Add options
+    options.forEach(opt => {
+      const el = document.createElement('option');
+      el.value = opt.id;
+      el.textContent = opt.name;
+      select.appendChild(el);
+    });
+
+    if (value === '<various>') {
+      const varOpt = document.createElement('option');
+      varOpt.value = '';
+      varOpt.textContent = t('common.various', null, '<various>');
+      varOpt.selected = true;
+      select.prepend(varOpt);
+    } else {
+      select.value = value;
+    }
+
+    select.addEventListener('change', (e) => onChange(e.target.value));
+    div.appendChild(select);
+    return div;
+  }
+
+  function getCommonValue(items, getter) {
+    if (items.length === 0) return null;
+    const first = getter(items[0]);
+    for (let i = 1; i < items.length; i++) {
+      if (getter(items[i]) !== first) return '<various>';
+    }
+    return first;
+  }
+
+  // ─── Legend ──────────────────────────────────────────────
+  function renderLegend() {
+    if (!legendContent) return;
+    legendContent.innerHTML = '';
+
+    // Nodes
+    state.nodeTypes.forEach(t => {
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML = `
         <div class="legend-dot" style="background:${t.color}"></div>
         <span>${escHtml(getNodeTypeDisplayName(t.id, t.name))}</span>
       `;
-    legendContent.appendChild(item);
-  });
+      legendContent.appendChild(item);
+    });
 
-  // Connections
-  state.connTypes.forEach(t => {
-    const item = document.createElement('div');
-    item.className = 'legend-item';
-    // Dashed line viz
-    const dash = t.dash.length > 0 ? 'dashed' : 'solid';
-    item.innerHTML = `
+    // Connections
+    state.connTypes.forEach(t => {
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      // Dashed line viz
+      const dash = t.dash.length > 0 ? 'dashed' : 'solid';
+      item.innerHTML = `
         <div class="legend-line" style="background:${t.color}; border-bottom:${dash === 'dashed' ? '1px dashed' : 'none'}"></div>
         <span>${escHtml(getConnTypeDisplayName(t.id, t.name))}</span>
       `;
-    legendContent.appendChild(item);
-  });
-}
+      legendContent.appendChild(item);
+    });
+  }
 
-// Utils
-function colorToHex(color) {
-  const ctx = document.createElement('canvas').getContext('2d');
-  ctx.fillStyle = color;
-  return ctx.fillStyle;
-}
-// Expose for table clicks
-window.selectNode = (id) => selectItem({ type: 'node', id });
-window.selectConnection = (id) => selectItem({ type: 'connection', id });
-}) ();
+  // Utils
+  function colorToHex(color) {
+    const ctx = document.createElement('canvas').getContext('2d');
+    ctx.fillStyle = color;
+    return ctx.fillStyle;
+  }
+  // Expose for table clicks
+  window.selectNode = (id) => selectItem({ type: 'node', id });
+  window.selectConnection = (id) => selectItem({ type: 'connection', id });
+})();
 
