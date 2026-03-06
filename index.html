@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -309,73 +309,77 @@
           </button>
         </div>
       </div>
-      <div class="modal-content">
-        <!-- Part 0: Summary -->
-        <section id="report-summary" class="report-section">
-          <h3 data-i18n="report.section.summary">0. Report Summary</h3>
-          <div class="summary-stats">
-            <div class="stat-card">
-              <span class="stat-label" data-i18n="report.stat.totalTime">Total Evacuation Time</span>
-              <span class="stat-value" id="repTotalTime">--</span>
-              <span class="stat-unit">min</span>
+      <div class="modal-content report-split-layout">
+        <!-- Left: sticky diagram -->
+        <div class="report-diagram-panel">
+          <section id="report-diagram" class="report-section">
+            <h3 data-i18n="report.section.diagram">1. Static Diagram</h3>
+            <div class="diagram-container">
+              <canvas id="reportCanvas"></canvas>
             </div>
-            <div class="stat-card">
-              <span class="stat-label" data-i18n="report.stat.totalPeople">Total People</span>
-              <span class="stat-value" id="repTotalPeople">--</span>
+          </section>
+        </div>
+        <!-- Right: scrollable content -->
+        <div class="report-scroll-panel">
+          <!-- Part 0: Summary -->
+          <section id="report-summary" class="report-section">
+            <h3 data-i18n="report.section.summary">0. Report Summary</h3>
+            <div class="summary-stats">
+              <div class="stat-card">
+                <span class="stat-label" data-i18n="report.stat.totalTime">Total Evacuation Time</span>
+                <span class="stat-value" id="repTotalTime">--</span>
+                <span class="stat-unit">min</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label" data-i18n="report.stat.totalPeople">Total People</span>
+                <span class="stat-value" id="repTotalPeople">--</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label" data-i18n="report.stat.criticalExits">Critical Exits</span>
+                <span class="stat-value" id="repCriticalPath">--</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label" data-i18n="report.stat.connections">Connections</span>
+                <span class="stat-value" id="repConnCount">--</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label" data-i18n="report.stat.bottlenecks">Bottlenecks</span>
+                <span class="stat-value" id="repBottlenecks">--</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label" data-i18n="report.stat.graphSize">Graph Size</span>
+                <span class="stat-value stat-value-small" id="repGraphSize">--</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label" data-i18n="report.stat.method">Method</span>
+                <span class="stat-value stat-value-small" id="repMethod">--</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label" data-i18n="report.stat.generated">Generated</span>
+                <span class="stat-value stat-value-small" id="repGeneratedAt">--</span>
+              </div>
             </div>
-            <div class="stat-card">
-              <span class="stat-label" data-i18n="report.stat.criticalExits">Critical Exits</span>
-              <span class="stat-value" id="repCriticalPath">--</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label" data-i18n="report.stat.connections">Connections</span>
-              <span class="stat-value" id="repConnCount">--</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label" data-i18n="report.stat.bottlenecks">Bottlenecks</span>
-              <span class="stat-value" id="repBottlenecks">--</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label" data-i18n="report.stat.graphSize">Graph Size</span>
-              <span class="stat-value stat-value-small" id="repGraphSize">--</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label" data-i18n="report.stat.method">Method</span>
-              <span class="stat-value stat-value-small" id="repMethod">--</span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label" data-i18n="report.stat.generated">Generated</span>
-              <span class="stat-value stat-value-small" id="repGeneratedAt">--</span>
-            </div>
-          </div>
-          <div id="reportExecutiveSummary" class="report-executive"></div>
-          <div id="reportMetaGrid" class="report-meta-grid"></div>
-        </section>
+            <div id="reportExecutiveSummary" class="report-executive"></div>
+            <div id="reportMetaGrid" class="report-meta-grid"></div>
+          </section>
 
-        <!-- Part 1: Static Diagram -->
-        <section id="report-diagram" class="report-section">
-          <h3 data-i18n="report.section.diagram">1. Static Diagram</h3>
-          <div class="diagram-container">
-            <canvas id="reportCanvas"></canvas>
-          </div>
-        </section>
+          <!-- Part 2: Sequence Table -->
+          <section id="report-table" class="report-section">
+            <h3 data-i18n="report.section.table">2. Sequence of Travel</h3>
+            <div class="report-table-wrap">
+              <table class="report-data-table">
+                <thead id="reportTableHead"></thead>
+                <tbody id="reportTableBody"></tbody>
+              </table>
+            </div>
+          </section>
 
-        <!-- Part 2: Sequence Table -->
-        <section id="report-table" class="report-section">
-          <h3 data-i18n="report.section.table">2. Sequence of Travel</h3>
-          <div class="report-table-wrap">
-            <table class="report-data-table">
-              <thead id="reportTableHead"></thead>
-              <tbody id="reportTableBody"></tbody>
-            </table>
-          </div>
-        </section>
-
-        <!-- Part 3: Math Proof -->
-        <section id="report-proof" class="report-section">
-          <h3 data-i18n="report.section.proof">3. Detailed Math Proof</h3>
-          <div id="mathProofContent" class="math-content"></div>
-        </section>
+          <!-- Part 3: Math Proof -->
+          <section id="report-proof" class="report-section">
+            <h3 data-i18n="report.section.proof">3. Detailed Math Proof</h3>
+            <div id="mathProofContent" class="math-content"></div>
+          </section>
+        </div>
       </div>
     </div>
   </div>

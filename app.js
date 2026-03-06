@@ -2109,9 +2109,48 @@
     const orderedNodes = getEvacuationOrderedNodes();
     const nodeMap = new Map(state.nodes.map(n => [n.id, n]));
     const nodeRank = new Map(orderedNodes.map((n, idx) => [n.id, idx]));
-    const orderedConnections = [...state.connections].sort((a, b) => (
-      compareConnectionsByEvacuationTraversal(a, b, nodeMap, nodeRank)
-    ));
+    // BFS traversal from start nodes to order connections by travel path
+    const adjacency = new Map();
+    state.connections.forEach(c => {
+      if (!adjacency.has(c.sourceId)) adjacency.set(c.sourceId, []);
+      if (!adjacency.has(c.targetId)) adjacency.set(c.targetId, []);
+      adjacency.get(c.sourceId).push({ conn: c, neighborId: c.targetId });
+      adjacency.get(c.targetId).push({ conn: c, neighborId: c.sourceId });
+    });
+
+    const visitedConns = new Set();
+    const orderedConnections = [];
+    const visitedNodes = new Set();
+    const bfsQueue = [];
+
+    // Seed BFS with start nodes (in evacuation-ordered sequence)
+    orderedNodes.forEach(n => {
+      if (SOURCE_TYPES.includes(n.typeId) && !visitedNodes.has(n.id)) {
+        visitedNodes.add(n.id);
+        bfsQueue.push(n.id);
+      }
+    });
+
+    while (bfsQueue.length > 0) {
+      const curr = bfsQueue.shift();
+      const edges = adjacency.get(curr) || [];
+      // Sort edges by neighbor rank for deterministic ordering
+      edges.sort((a, b) => (nodeRank.get(a.neighborId) ?? Infinity) - (nodeRank.get(b.neighborId) ?? Infinity));
+      for (const { conn, neighborId } of edges) {
+        if (visitedConns.has(conn.id)) continue;
+        visitedConns.add(conn.id);
+        orderedConnections.push(conn);
+        if (!visitedNodes.has(neighborId)) {
+          visitedNodes.add(neighborId);
+          bfsQueue.push(neighborId);
+        }
+      }
+    }
+
+    // Add any remaining unvisited connections (disconnected subgraphs)
+    state.connections.forEach(c => {
+      if (!visitedConns.has(c.id)) orderedConnections.push(c);
+    });
 
     const nodeIdMap = new Map();
     orderedNodes.forEach((node, idx) => {
@@ -2745,8 +2784,10 @@
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
 
-    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-    const newZoom = Math.max(0.1, Math.min(5, cam.zoom * factor));
+    // Smooth proportional zoom: small scroll = small change, no jumps
+    const zoomSpeed = 0.001;
+    const factor = Math.pow(2, -e.deltaY * zoomSpeed);
+    const newZoom = clamp(cam.zoom * factor, ZOOM_MIN, ZOOM_MAX);
     const ratio = newZoom / cam.zoom;
 
     cam.x = mx - (mx - cam.x) * ratio;
@@ -2899,7 +2940,7 @@
 
   const btnExport = document.getElementById('btnExport');
   if (btnExport) {
-    btnExport.addEventListener('click', () => {
+    btnExport.addEventListener('click', async () => {
       state.metadata = normalizeMetadata({
         ...state.metadata,
         exportedAt: toLocalDateTimeValue(),
@@ -2912,12 +2953,32 @@
         metadata: state.metadata,
       };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'graph.json';
-      a.click();
-      URL.revokeObjectURL(url);
+      const projectName = (state.metadata.project || 'graph').replace(/[^a-z0-9_\-]/gi, '_');
+
+      if (window.showSaveFilePicker) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: `${projectName}.json`,
+            types: [{ description: 'JSON Files', accept: { 'application/json': ['.json'] } }],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            console.error('Export failed:', err);
+            alert(t('alert.exportFailed', { message: err.message }, `Export failed: ${err.message}`));
+          }
+        }
+      } else {
+        // Fallback for browsers without File System Access API
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${projectName}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
       render();
     });
   }
