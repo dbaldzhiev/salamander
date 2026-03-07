@@ -2106,52 +2106,42 @@
 
     recalcPeopleCounts();
 
-    const orderedNodes = getEvacuationOrderedNodes();
-    const nodeMap = new Map(state.nodes.map(n => [n.id, n]));
-    const nodeRank = new Map(orderedNodes.map((n, idx) => [n.id, idx]));
-    // BFS traversal from start nodes to order connections by travel path
-    const adjacency = new Map();
-    state.connections.forEach(c => {
-      if (!adjacency.has(c.sourceId)) adjacency.set(c.sourceId, []);
-      if (!adjacency.has(c.targetId)) adjacency.set(c.targetId, []);
-      adjacency.get(c.sourceId).push({ conn: c, neighborId: c.targetId });
-      adjacency.get(c.targetId).push({ conn: c, neighborId: c.sourceId });
-    });
-
-    const visitedConns = new Set();
-    const orderedConnections = [];
-    const visitedNodes = new Set();
-    const bfsQueue = [];
-
-    // Seed BFS with start nodes (in evacuation-ordered sequence)
-    orderedNodes.forEach(n => {
-      if (SOURCE_TYPES.includes(n.typeId) && !visitedNodes.has(n.id)) {
-        visitedNodes.add(n.id);
-        bfsQueue.push(n.id);
-      }
-    });
-
-    while (bfsQueue.length > 0) {
-      const curr = bfsQueue.shift();
-      const edges = adjacency.get(curr) || [];
-      // Sort edges by neighbor rank for deterministic ordering
-      edges.sort((a, b) => (nodeRank.get(a.neighborId) ?? Infinity) - (nodeRank.get(b.neighborId) ?? Infinity));
-      for (const { conn, neighborId } of edges) {
-        if (visitedConns.has(conn.id)) continue;
-        visitedConns.add(conn.id);
-        orderedConnections.push(conn);
-        if (!visitedNodes.has(neighborId)) {
-          visitedNodes.add(neighborId);
-          bfsQueue.push(neighborId);
-        }
-      }
+    // ── 1. Get topologically sorted connections from the engine ──
+    //    This is the same order the calculation and proof follow.
+    const engine = syncCalcEngineState();
+    let orderedConnections;
+    if (engine) {
+      orderedConnections = engine.sortConnectionsTopologically();
+    } else {
+      // Fallback: keep current order
+      orderedConnections = [...state.connections];
     }
 
-    // Add any remaining unvisited connections (disconnected subgraphs)
-    state.connections.forEach(c => {
-      if (!visitedConns.has(c.id)) orderedConnections.push(c);
+    // ── 2. Derive node order from the connection traversal ──
+    //    Nodes appear in the order they are first encountered
+    //    (as source, then target) walking the connection list.
+    const seenNodes = new Set();
+    const orderedNodes = [];
+
+    // First: source nodes that appear as sources in the first connections
+    // (Kahn's algorithm starts from in-degree-0 nodes = start / source nodes)
+    orderedConnections.forEach(conn => {
+      if (!seenNodes.has(conn.sourceId)) {
+        const n = state.nodes.find(x => x.id === conn.sourceId);
+        if (n) { seenNodes.add(n.id); orderedNodes.push(n); }
+      }
+      if (!seenNodes.has(conn.targetId)) {
+        const n = state.nodes.find(x => x.id === conn.targetId);
+        if (n) { seenNodes.add(n.id); orderedNodes.push(n); }
+      }
     });
 
+    // Append any disconnected nodes at the end
+    state.nodes.forEach(n => {
+      if (!seenNodes.has(n.id)) orderedNodes.push(n);
+    });
+
+    // ── 3. Build old → new ID maps ──
     const nodeIdMap = new Map();
     orderedNodes.forEach((node, idx) => {
       nodeIdMap.set(node.id, idx + 1);
@@ -2161,25 +2151,49 @@
     orderedConnections.forEach((conn, idx) => {
       connIdMap.set(conn.id, idx + 1);
     });
-
-    state.nodes.forEach((node) => {
-      const nextId = nodeIdMap.get(node.id);
-      if (nextId != null) node.id = nextId;
+    // Disconnected connections
+    state.connections.forEach(c => {
+      if (!connIdMap.has(c.id)) connIdMap.set(c.id, connIdMap.size + 1);
     });
 
-    state.connections.forEach((conn) => {
-      const nextConnId = connIdMap.get(conn.id);
-      const nextSrcId = nodeIdMap.get(conn.sourceId);
-      const nextTgtId = nodeIdMap.get(conn.targetId);
-
-      if (nextConnId != null) conn.id = nextConnId;
-      if (nextSrcId != null) conn.sourceId = nextSrcId;
-      if (nextTgtId != null) conn.targetId = nextTgtId;
+    // ── 4. Two-pass ID assignment (prevents collision) ──
+    // Pass 1: shift all IDs to temporary negative sentinels
+    state.nodes.forEach(node => {
+      node._oldId = node.id;
+      node.id = -(node._oldId + 1000000);
+    });
+    state.connections.forEach(conn => {
+      conn._oldId = conn.id;
+      conn._oldSrc = conn.sourceId;
+      conn._oldTgt = conn.targetId;
+      conn.id = -(conn._oldId + 1000000);
+      conn.sourceId = -(conn._oldSrc + 1000000);
+      conn.targetId = -(conn._oldTgt + 1000000);
     });
 
+    // Pass 2: assign final IDs from the maps
+    state.nodes.forEach(node => {
+      const newId = nodeIdMap.get(node._oldId);
+      node.id = newId != null ? newId : Math.abs(node.id);
+      delete node._oldId;
+    });
+    state.connections.forEach(conn => {
+      const newConnId = connIdMap.get(conn._oldId);
+      const newSrcId = nodeIdMap.get(conn._oldSrc);
+      const newTgtId = nodeIdMap.get(conn._oldTgt);
+      conn.id = newConnId != null ? newConnId : Math.abs(conn.id);
+      conn.sourceId = newSrcId != null ? newSrcId : Math.abs(conn.sourceId);
+      conn.targetId = newTgtId != null ? newTgtId : Math.abs(conn.targetId);
+      delete conn._oldId;
+      delete conn._oldSrc;
+      delete conn._oldTgt;
+    });
+
+    // ── 5. Sort arrays by new ID ──
     state.nodes.sort((a, b) => a.id - b.id);
     state.connections.sort((a, b) => a.id - b.id);
 
+    // ── 6. Remap selection ──
     const remappedSelection = new Set();
     selectedItems.forEach((key) => {
       const [kind, idStr] = key.split(':');
@@ -2209,6 +2223,7 @@
     if (!skipHistory) commitHistory();
     if (!skipRender) render();
   }
+
 
   // ─── Selection ────────────────────────────────────────────
   // ─── Interaction Helpers ─────────────────────────────────
